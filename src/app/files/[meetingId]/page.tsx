@@ -1,19 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import moment from 'moment-timezone';
 import { toast } from 'sonner';
 import { UploadProgressModal } from '@/components/upload-progress-modal';
 import { UploadProgressMini } from '@/components/upload-progress-mini';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { 
   ArrowLeft, 
-  Video, 
   FileText, 
   Download, 
   Play, 
@@ -26,8 +23,6 @@ import {
   MessageSquare,
   Upload,
   X,
-  Calendar,
-  Users,
   FileIcon
 } from 'lucide-react';
 
@@ -101,14 +96,7 @@ export default function FilesPage() {
   const [isCheckingUploads, setIsCheckingUploads] = useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
 
-  useEffect(() => {
-    if (meetingId) {
-      fetchRecordings();
-      checkUploadedFiles();
-    }
-  }, [meetingId]);
-
-  const checkUploadedFiles = async () => {
+  const checkUploadedFiles = useCallback(async () => {
     if (!meetingId) return;
     
     setIsCheckingUploads(true);
@@ -129,9 +117,9 @@ export default function FilesPage() {
     } finally {
       setIsCheckingUploads(false);
     }
-  };
+  }, [meetingId]);
 
-  const fetchRecordings = async () => {
+  const fetchRecordings = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
@@ -150,7 +138,14 @@ export default function FilesPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [meetingId]);
+
+  useEffect(() => {
+    if (meetingId) {
+      fetchRecordings();
+      checkUploadedFiles();
+    }
+  }, [meetingId, fetchRecordings, checkUploadedFiles]);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -601,7 +596,7 @@ export default function FilesPage() {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold flex items-center gap-2">
-                    <Video className="w-6 h-6 text-primary" />
+                    <FileText className="w-6 h-6 text-primary" />
                     Meeting Files
                   </h1>
                   <p className="text-muted-foreground mt-1">{recordings.topic}</p>
@@ -704,7 +699,6 @@ export default function FilesPage() {
                 {recordings.recording_files.map((file) => {
                   const fileDateTime = formatDateTime(file.recording_start);
                   const isActionLoading = loadingActions.has(file.id);
-                  const isUploaded = uploadedFiles.has(file.id);
                   
                   return (
                     <Card key={file.id} className="hover:shadow-md transition-shadow">

@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { ZoomAPI } from '@/lib/zoom-api';
 
 const zoomAPI = new ZoomAPI();
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     console.log('🔍 Fetching current user info');
 
@@ -17,10 +17,10 @@ export async function GET(request: NextRequest) {
       user: userInfo
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ Error fetching user info:', error);
     
-    const errorMessage = error.message || 'Failed to fetch user information';
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch user information';
     return NextResponse.json(
       { error: errorMessage },
       { status: 500 }
