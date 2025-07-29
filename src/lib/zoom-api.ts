@@ -136,11 +136,12 @@ export class ZoomAPI {
         throw new Error('No access token in OAuth response');
       }
       
-    } catch (error: any) {
-      console.log('❌ OAuth failed:', error.response?.status);
-      console.log('Error details:', error.message);
-      if (error.response?.data) {
-        console.log('Error response:', error.response.data);
+    } catch (error: unknown) {
+      console.log('❌ OAuth failed:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
       }
       throw error;
     }
@@ -149,10 +150,10 @@ export class ZoomAPI {
   // Test method to verify the access token works
   async testConnection(): Promise<boolean> {
     try {
-      const token = await this.getAccessToken();
+      await this.getAccessToken();
       console.log('✅ Access token obtained successfully');
       return true;
-    } catch (error) {
+    } catch {
       console.log('❌ Failed to get access token');
       return false;
     }
@@ -171,11 +172,12 @@ export class ZoomAPI {
       console.log('✅ Current user info fetched');
       console.log('User data:', data);
       return data;
-    } catch (error: any) {
-      console.log('❌ Failed to get current user:', error.response?.status);
-      console.log('Error details:', error.message);
-      if (error.response?.data) {
-        console.log('Error response:', error.response.data);
+    } catch (error: unknown) {
+      console.log('❌ Failed to get current user:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
       }
       throw error;
     }
@@ -225,11 +227,12 @@ export class ZoomAPI {
       console.log('✅ Recordings fetched successfully');
       console.log('Recordings data:', data);
       return data;
-    } catch (error: any) {
-      console.log('❌ Failed to get recordings:', error.response?.status);
-      console.log('Error details:', error.message);
-      if (error.response?.data) {
-        console.log('Error response:', error.response.data);
+    } catch (error: unknown) {
+      console.log('❌ Failed to get recordings:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
       }
       throw error;
     }
@@ -248,17 +251,18 @@ export class ZoomAPI {
       console.log('✅ Meeting recordings fetched successfully');
       console.log('Meeting recordings data:', data);
       return data;
-    } catch (error: any) {
-      console.log('❌ Failed to get meeting recordings:', error.response?.status);
-      console.log('Error details:', error.message);
-      if (error.response?.data) {
-        console.log('Error response:', error.response.data);
+    } catch (error: unknown) {
+      console.log('❌ Failed to get meeting recordings:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
       }
       throw error;
     }
   }
 
-  async getUserInfo(userId: string = 'me'): Promise<any> {
+  async getUserInfo(userId: string = 'me'): Promise<unknown> {
     try {
       const accessToken = await this.getAccessToken();
       const response = await axios.get(`https://api.zoom.us/v2/users/${userId}`, {
@@ -274,11 +278,12 @@ export class ZoomAPI {
       } else {
         throw new Error('No user data in response');
       }
-    } catch (error: any) {
-      console.error('Error fetching user info:', error.response?.status);
-      console.log('Error details:', error.message);
-      if (error.response?.data) {
-        console.log('Error response:', error.response.data);
+    } catch (error: unknown) {
+      console.error('Error fetching user info:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
       }
       throw error;
     }

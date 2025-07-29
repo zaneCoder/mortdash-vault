@@ -4,8 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Video, Home, FileText } from 'lucide-react';
+import { Home, FileText } from 'lucide-react';
 
 export function TopNavigation() {
   const pathname = usePathname();

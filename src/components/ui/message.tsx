@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode, createContext, useContext, useEffect } from 'react';
+import { useState, ReactNode, createContext, useContext, useEffect, useCallback } from 'react';
 import { X, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Message {
@@ -20,26 +20,22 @@ const MessageContext = createContext<MessageContextType | undefined>(undefined);
 export function MessageProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([]);
 
-  const addMessage = (message: Omit<Message, 'id'>) => {
-    const id = Math.random().toString(36).substr(2, 9);
-    const newMessage = { ...message, id };
-    
+  const addMessage = useCallback((message: Omit<Message, 'id'>) => {
+    const newMessage: Message = {
+      ...message,
+      id: Math.random().toString(36).substr(2, 9),
+    };
     setMessages(prev => [...prev, newMessage]);
+  }, []);
 
-    // Auto remove after 4 seconds
-    setTimeout(() => {
-      removeMessage(id);
-    }, 4000);
-  };
-
-  const removeMessage = (id: string) => {
+  const removeMessage = useCallback((id: string) => {
     setMessages(prev => prev.filter(message => message.id !== id));
-  };
+  }, []);
 
   // Register the message instance globally
   useEffect(() => {
     setMessageInstance({ addMessage, removeMessage });
-  }, []);
+  }, [addMessage, removeMessage]);
 
   return (
     <MessageContext.Provider value={{ messages, addMessage, removeMessage }}>
@@ -113,9 +109,9 @@ export function useMessage() {
 }
 
 // Global message instance
-let messageInstance: any = null;
+let messageInstance: { addMessage: (message: Omit<Message, 'id'>) => void; removeMessage: (id: string) => void } | null = null;
 
-export const setMessageInstance = (instance: any) => {
+export const setMessageInstance = (instance: { addMessage: (message: Omit<Message, 'id'>) => void; removeMessage: (id: string) => void }) => {
   messageInstance = instance;
 };
 
