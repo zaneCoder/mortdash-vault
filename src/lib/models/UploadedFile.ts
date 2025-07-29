@@ -41,10 +41,7 @@ const UploadedFileSchema = new Schema<IUploadedFile>({
   },
   gcsUrl: {
     type: String,
-    required: function(this: IUploadedFile) {
-      // Only require gcsUrl for completed uploads
-      return this.status === 'completed';
-    }
+    required: false
   },
   uploadedAt: {
     type: Date,

@@ -1,5 +1,13 @@
 import { Storage } from '@google-cloud/storage';
 
+// Debug environment variables (without exposing sensitive data)
+console.log('🔧 GCS Configuration Debug:');
+console.log('📋 Project ID:', process.env.GOOGLE_CLOUD_PROJECT_ID ? '✅ Set' : '❌ Missing');
+console.log('📋 Bucket Name:', process.env.GOOGLE_CLOUD_BUCKET_NAME ? '✅ Set' : '❌ Missing');
+console.log('📋 Client Email:', process.env.CLIENT_EMAIL ? '✅ Set' : '❌ Missing');
+console.log('📋 Private Key:', process.env.PRIVATE_KEY ? '✅ Set' : '❌ Missing');
+console.log('📋 Private Key ID:', process.env.PRIVATE_KEY_ID ? '✅ Set' : '❌ Missing');
+
 // Initialize Google Cloud Storage with hardcoded credentials from .env
 const storage = new Storage({
   projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
@@ -24,6 +32,10 @@ export class GCSAPI {
 
   async uploadFile(fileBuffer: Buffer, fileName: string, contentType: string): Promise<string> {
     try {
+      console.log('🚀 Starting GCS upload for:', fileName);
+      console.log('📦 File size:', fileBuffer.length, 'bytes');
+      console.log('📋 Content type:', contentType);
+      
       const file = this.bucket.file(fileName);
       
       await file.save(fileBuffer, {
@@ -33,10 +45,23 @@ export class GCSAPI {
         resumable: false,
       });
 
+      console.log('✅ GCS upload completed for:', fileName);
       // Return the file URL (will be private, use signed URLs for access)
       return `gs://${bucketName}/${fileName}`;
     } catch (error) {
-      console.error('GCS upload error:', error);
+      console.error('❌ GCS upload error:', error);
+      console.error('❌ Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
+      
+      // Check for specific OpenSSL errors
+      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED')) {
+        console.error('🔐 OpenSSL Error detected - this is likely a private key format issue');
+        console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
+      }
+      
       throw new Error('Failed to upload file to Google Cloud Storage');
     }
   }
@@ -48,6 +73,10 @@ export class GCSAPI {
     onProgress?: (progress: number) => void
   ): Promise<string> {
     try {
+      console.log('🚀 Starting GCS upload with progress for:', fileName);
+      console.log('📦 File size:', fileBuffer.length, 'bytes');
+      console.log('📋 Content type:', contentType);
+      
       const file = this.bucket.file(fileName);
       
       // Use resumable upload for progress tracking
@@ -64,10 +93,23 @@ export class GCSAPI {
         },
       });
 
+      console.log('✅ GCS upload with progress completed for:', fileName);
       // Return the file URL (will be private, use signed URLs for access)
       return `gs://${bucketName}/${fileName}`;
     } catch (error) {
-      console.error('GCS upload error:', error);
+      console.error('❌ GCS upload with progress error:', error);
+      console.error('❌ Error details:', {
+        name: (error as Error).name,
+        message: (error as Error).message,
+        stack: (error as Error).stack
+      });
+      
+      // Check for specific OpenSSL errors
+      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED')) {
+        console.error('🔐 OpenSSL Error detected - this is likely a private key format issue');
+        console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
+      }
+      
       throw new Error('Failed to upload file to Google Cloud Storage');
     }
   }
