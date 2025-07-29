@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { useRouter, useSearchParams } from 'next/navigation';
 import moment from 'moment-timezone';
@@ -71,7 +71,7 @@ interface UploadStatus {
   };
 }
 
-export default function Home() {
+function HomeContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordings, setRecordings] = useState<RecordingsResponse | null>(null);
@@ -82,52 +82,13 @@ export default function Home() {
   const [loadingPagination, setLoadingPagination] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<UploadStatus>({});
   const [isCheckingUploads, setIsCheckingUploads] = useState(false);
+  const [hasInitialized, setHasInitialized] = useState(false);
 
-  const { register, handleSubmit, setValue, watch } = useForm<FormData>();
+  const { register, handleSubmit, setValue } = useForm<FormData>();
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Restore filters from URL on component mount
-  useEffect(() => {
-    const fromDateParam = searchParams.get('fromDate');
-    const toDateParam = searchParams.get('toDate');
-    const userId = searchParams.get('userId');
-
-    if (fromDateParam) {
-      const date = new Date(fromDateParam);
-      setFromDate(date);
-      setValue('fromDate', fromDateParam);
-    }
-    if (toDateParam) {
-      const date = new Date(toDateParam);
-      setToDate(date);
-      setValue('toDate', toDateParam);
-    }
-    if (userId) {
-      setValue('userId', userId);
-    }
-
-    // If we have filters in URL, automatically fetch recordings
-    if (fromDateParam || toDateParam || userId) {
-      const formData: FormData = {
-        userId: userId || '',
-        fromDate: fromDateParam || undefined,
-        toDate: toDateParam || undefined,
-      };
-      handleFormSubmit(formData);
-    }
-  }, [searchParams, setValue]);
-
-  // Check upload status on page load if recordings are already available
-  useEffect(() => {
-    if (recordings && recordings.meetings.length > 0) {
-      console.log('🔄 Checking upload status on page load...');
-      // Don't show toast for automatic status check
-      checkAllUploadStatuses();
-    }
-  }, [recordings]);
-
-  const checkAllUploadStatuses = async () => {
+  const checkAllUploadStatuses = useCallback(async () => {
     if (!recordings) return;
     
     setIsCheckingUploads(true);
@@ -146,11 +107,11 @@ export default function Home() {
         
         recordings.meetings.forEach(meeting => {
           const meetingUploadedFiles = result.uploadedFiles.filter(
-            (file: any) => file.meetingId === meeting.id
+            (file: { meetingId: number; fileId: string }) => file.meetingId === meeting.id
           );
           
           const uploadedFileIds = new Set<string>();
-          meetingUploadedFiles.forEach((file: any) => {
+          meetingUploadedFiles.forEach((file: { fileId: string }) => {
             uploadedFileIds.add(file.fileId);
           });
           
@@ -191,9 +152,9 @@ export default function Home() {
     } finally {
       setIsCheckingUploads(false);
     }
-  };
+  }, [recordings]);
 
-  const handleFormSubmit = async (data: FormData) => {
+  const handleFormSubmit = useCallback(async (data: FormData) => {
     setIsLoading(true);
     setError(null);
     setRecordings(null);
@@ -232,21 +193,51 @@ export default function Home() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [checkAllUploadStatuses]);
 
-  const onSubmit = async (data: FormData) => {
-    // Update URL with filter parameters
-    const params = new URLSearchParams();
-    if (data.fromDate) params.set('fromDate', data.fromDate);
-    if (data.toDate) params.set('toDate', data.toDate);
-    if (data.userId) params.set('userId', data.userId);
+  // Restore filters from URL on component mount (only once)
+  useEffect(() => {
+    if (hasInitialized) return;
+    
+    const fromDateParam = searchParams.get('fromDate');
+    const toDateParam = searchParams.get('toDate');
+    const userId = searchParams.get('userId');
 
-    // Update URL without triggering a page reload
-    const newUrl = params.toString() ? `/?${params.toString()}` : '/';
-    router.replace(newUrl, { scroll: false });
+    if (fromDateParam) {
+      const date = new Date(fromDateParam);
+      setFromDate(date);
+      setValue('fromDate', fromDateParam);
+    }
+    if (toDateParam) {
+      const date = new Date(toDateParam);
+      setToDate(date);
+      setValue('toDate', toDateParam);
+    }
+    if (userId) {
+      setValue('userId', userId);
+    }
 
-    await handleFormSubmit(data);
-  };
+    // If we have filters in URL, automatically fetch recordings
+    if (fromDateParam || toDateParam || userId) {
+      const formData: FormData = {
+        userId: userId || '',
+        fromDate: fromDateParam || undefined,
+        toDate: toDateParam || undefined,
+      };
+      handleFormSubmit(formData);
+    }
+    
+    setHasInitialized(true);
+  }, [searchParams, setValue, handleFormSubmit, hasInitialized]);
+
+  // Check upload status on page load if recordings are already available
+  useEffect(() => {
+    if (recordings && recordings.meetings.length > 0) {
+      console.log('🔄 Checking upload status on page load...');
+      // Don't show toast for automatic status check
+      checkAllUploadStatuses();
+    }
+  }, [recordings, checkAllUploadStatuses]);
 
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -371,7 +362,7 @@ export default function Home() {
     }, 300);
   };
 
-  const handleFormSubmitWithDates = async (data: FormData) => {
+  const handleFormSubmitWithURL = async (data: FormData) => {
     // Convert dates to local date strings for the API (avoiding timezone shifts)
     const formDataWithDates = {
       ...data,
@@ -379,10 +370,12 @@ export default function Home() {
       toDate: toDate ? format(toDate, 'yyyy-MM-dd') : undefined,
     };
     
-    await handleFormSubmit(formDataWithDates);
-  };
-
-  const handleFormSubmitWithURL = async (data: FormData) => {
+    console.log('📅 Form submission with dates:', {
+      fromDate: formDataWithDates.fromDate,
+      toDate: formDataWithDates.toDate,
+      userId: formDataWithDates.userId
+    });
+    
     // Update URL with filter parameters
     const params = new URLSearchParams();
     if (fromDate) params.set('fromDate', format(fromDate, 'yyyy-MM-dd'));
@@ -392,8 +385,8 @@ export default function Home() {
     // Update URL without triggering a page reload
     const newUrl = params.toString() ? `/?${params.toString()}` : '/';
     router.replace(newUrl, { scroll: false });
-
-    await handleFormSubmitWithDates(data);
+    
+    await handleFormSubmit(formDataWithDates);
   };
 
   return (
@@ -704,5 +697,13 @@ export default function Home() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <HomeContent />
+    </Suspense>
   );
 } 

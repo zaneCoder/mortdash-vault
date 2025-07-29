@@ -56,8 +56,8 @@ export class GCSAPI {
           contentType: contentType,
         },
         resumable: true,
-        onUploadProgress: (progressEvent: any) => {
-          if (onProgress && progressEvent.totalBytes) {
+        onUploadProgress: (progressEvent: { totalBytes?: number; bytesWritten?: number }) => {
+          if (onProgress && progressEvent.totalBytes && progressEvent.bytesWritten) {
             const progress = Math.round((progressEvent.bytesWritten / progressEvent.totalBytes) * 100);
             onProgress(progress);
           }

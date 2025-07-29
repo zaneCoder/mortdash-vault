@@ -4,7 +4,9 @@ import { ZoomAPI } from '@/lib/zoom-api';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, fromDate, toDate } = body;
+    const { fromDate, toDate } = body;
+
+    console.log('📅 API received dates:', { fromDate, toDate });
 
     // Check if ZOOM_KEY is configured
     if (!process.env.ZOOM_KEY) {
@@ -28,10 +30,10 @@ export async function POST(request: NextRequest) {
       message: 'Successfully fetched recordings from Zoom API'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('API Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

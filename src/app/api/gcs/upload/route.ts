@@ -1,18 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { gcsAPI } from '@/lib/gcs-api';
-import { ZoomAPI } from '@/lib/zoom-api';
 import connectDB from '@/lib/mongodb';
 import { UploadedFile } from '@/lib/models/UploadedFile';
 import axios from 'axios';
 
-const zoomAPI = new ZoomAPI();
+interface RequestData {
+  fileUrl: string;
+  fileName: string;
+  fileType: string;
+  meetingId: string;
+  fileId: string;
+}
 
 export async function POST(request: NextRequest) {
-  let requestData: any;
+  let requestData: RequestData | undefined;
   
   try {
     // Parse request data once and store it
     requestData = await request.json();
+    
+    if (!requestData) {
+      return NextResponse.json(
+        { error: 'Invalid request data' },
+        { status: 400 }
+      );
+    }
+    
     const { fileUrl, fileName, fileType, meetingId, fileId } = requestData;
 
     console.log('🚀 Starting GCS upload for file:', fileId);
@@ -198,7 +211,7 @@ export async function POST(request: NextRequest) {
       message: 'File uploaded to Google Cloud Storage successfully'
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ GCS upload error:', error);
     
     // Try to save failed upload record using stored request data
@@ -214,7 +227,7 @@ export async function POST(request: NextRequest) {
           fileSize: 0,
           gcsUrl: '',
           status: 'failed',
-          error: error.message || 'Upload failed',
+          error: error instanceof Error ? error.message : 'Upload failed',
           uploadedAt: new Date()
         });
         await failedUpload.save();
@@ -226,7 +239,7 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { error: error.message || 'Failed to upload file to Google Cloud Storage' },
+      { error: error instanceof Error ? error.message : 'Failed to upload file to Google Cloud Storage' },
       { status: 500 }
     );
   }
