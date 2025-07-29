@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { DatePicker } from '@/components/ui/date-picker';
 import { User, Calendar, AlertCircle, CheckCircle, Clock, Video, FileText, ChevronLeft, ChevronRight, Upload, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 interface FormData {
   userId: string;
@@ -703,7 +704,9 @@ function HomeContent() {
 export default function Home() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      <HomeContent />
+      <ProtectedRoute>
+        <HomeContent />
+      </ProtectedRoute>
     </Suspense>
   );
 } 

@@ -4,10 +4,23 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Home, FileText } from 'lucide-react';
+import { Home, FileText, LogOut, User } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 export function TopNavigation() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      toast.success('Successfully logged out');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Failed to logout');
+    }
+  };
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-background border-b">
@@ -57,11 +70,25 @@ export function TopNavigation() {
             )}
           </nav>
 
-          {/* Right side - could add user menu, settings, etc. */}
+          {/* User Menu */}
           <div className="flex items-center gap-2">
-            <div className="text-xs text-muted-foreground">
-              Zoom Recordings Manager
-            </div>
+            {user && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="w-4 h-4" />
+                  <span className="hidden sm:inline">{user.email}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLogout}
+                  className="flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span className="hidden sm:inline">Logout</span>
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>

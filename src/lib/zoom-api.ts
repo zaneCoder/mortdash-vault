@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getAuthHeaders } from './auth-utils';
 
 export class ZoomAPI {
   private baseURL: string;
@@ -98,51 +99,30 @@ export class ZoomAPI {
       return cachedToken;
     }
     
-    console.log('Getting new OAuth access token...');
+    console.log('🔄 Getting new access token...');
     
     try {
-      // Use ZOOM_KEY as the base64 encoded client credentials
-      const zoomKey = process.env.ZOOM_KEY || '';
+      const response = await axios.post(this.authURL, {
+        grant_type: 'account_credentials',
+        account_id: this.accountId,
+      }, {
+        headers: {
+          'Authorization': `Basic ${Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64')}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+      });
+
+      const { access_token } = response.data;
       
-      if (!zoomKey) {
-        throw new Error('ZOOM_KEY environment variable is required');
-      }
-      
-      console.log('Using ZOOM_KEY as Basic auth credentials');
-      
-      const response = await axios.post(
-        'https://zoom.us/oauth/token',
-        new URLSearchParams({
-          grant_type: 'account_credentials',
-          account_id: this.accountId,
-        }),
-        {
-          headers: {
-            Authorization: `Basic ${zoomKey}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      );
-      
-      if (response.data.access_token) {
-        console.log('✅ OAuth successful');
-        console.log('Access token:', response.data.access_token);
-        
-        // Store the token with expiration
-        this.storeToken(response.data.access_token);
-        
-        return response.data.access_token;
+      if (access_token) {
+        this.storeToken(access_token);
+        console.log('✅ New access token obtained and stored');
+        return access_token;
       } else {
-        throw new Error('No access token in OAuth response');
+        throw new Error('No access token in response');
       }
-      
-    } catch (error: unknown) {
-      console.log('❌ OAuth failed:', error instanceof Error ? error.message : 'Unknown error');
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { status?: number; data?: unknown } };
-        console.log('Error response status:', axiosError.response?.status);
-        console.log('Error response data:', axiosError.response?.data);
-      }
+    } catch (error) {
+      console.error('❌ Failed to get access token:', error);
       throw error;
     }
   }
@@ -185,79 +165,43 @@ export class ZoomAPI {
 
   async getListMeetings(token: string, fromDate?: string, toDate?: string) {
     try {
-      // First get the current user info
-      const userInfo = await this.getCurrentUser(token);
-      const userId = userInfo.id;
-      console.log("Using user ID:", userId);
+      const authHeaders = await getAuthHeaders();
       
-      // Build URL with optional date parameters
-      let url = `https://api.zoom.us/v2/users/${userId}/recordings`;
       const params = new URLSearchParams();
-      
-      // If no dates provided, use today's date
-      if (!fromDate && !toDate) {
-        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
-        params.append('from', today);
-        console.log('No dates provided, using today:', today);
-      } else {
-        if (fromDate) {
-          params.append('from', fromDate);
-          console.log('Using from date:', fromDate);
-        }
-        
-        if (toDate) {
-          params.append('to', toDate);
-          console.log('Using to date:', toDate);
-        }
-      }
-      
-      if (params.toString()) {
-        url += `?${params.toString()}`;
-      }
-      
-      const options = {
-        method: 'GET',
-        url: url,
-        headers: {Authorization: `Bearer ${token}`}
-      };
-      
-      console.log('Fetching recordings from:', url);
-      
-      const { data } = await axios.request(options);
-      console.log('✅ Recordings fetched successfully');
-      console.log('Recordings data:', data);
-      return data;
-    } catch (error: unknown) {
-      console.log('❌ Failed to get recordings:', error instanceof Error ? error.message : 'Unknown error');
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { status?: number; data?: unknown } };
-        console.log('Error response status:', axiosError.response?.status);
-        console.log('Error response data:', axiosError.response?.data);
-      }
+      if (fromDate) params.append('from', fromDate);
+      if (toDate) params.append('to', toDate);
+      params.append('type', 'scheduled');
+      params.append('page_size', '300');
+
+      const response = await axios.get(`${this.baseURL}/users/me/recordings?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...authHeaders,
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ Failed to get meetings list:', error);
       throw error;
     }
   }
 
   // Get meeting recordings by meeting ID
   async getMeetingRecordings(token: string, meetingId: string) {
-    const options = {
-      method: 'GET',
-      url: `https://api.zoom.us/v2/meetings/${meetingId}/recordings?include_fields=download_access_token,recording_play_passcode`,
-      headers: {Authorization: `Bearer ${token}`}
-    };
-    
     try {
-      const { data } = await axios.request(options);
-      console.log('✅ Meeting recordings fetched successfully');
-      console.log('Meeting recordings data:', data);
-      return data;
-    } catch (error: unknown) {
-      console.log('❌ Failed to get meeting recordings:', error instanceof Error ? error.message : 'Unknown error');
-      if (error && typeof error === 'object' && 'response' in error) {
-        const axiosError = error as { response?: { status?: number; data?: unknown } };
-        console.log('Error response status:', axiosError.response?.status);
-        console.log('Error response data:', axiosError.response?.data);
-      }
+      const authHeaders = await getAuthHeaders();
+      
+      const response = await axios.get(`${this.baseURL}/meetings/${meetingId}/recordings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          ...authHeaders,
+        },
+      });
+
+      return response.data;
+    } catch (error) {
+      console.error('❌ Failed to get meeting recordings:', error);
       throw error;
     }
   }

@@ -9,6 +9,7 @@ import { UploadProgressMini } from '@/components/upload-progress-mini';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { 
   ArrowLeft, 
   FileText, 
@@ -77,7 +78,7 @@ interface UploadedFileRecord {
   uploadedAt: string;
 }
 
-export default function FilesPage() {
+function FilesPageContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -915,5 +916,13 @@ export default function FilesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function FilesPage() {
+  return (
+    <ProtectedRoute>
+      <FilesPageContent />
+    </ProtectedRoute>
   );
 } 
