@@ -219,13 +219,13 @@ export async function POST(request: NextRequest) {
       await connectDB();
       
       if (requestData && requestData.fileId && requestData.meetingId) {
+        // For failed uploads, don't include gcsUrl since it's optional for failed status
         const failedUpload = new UploadedFile({
           fileId: requestData.fileId,
           meetingId: parseInt(requestData.meetingId),
           fileName: requestData.fileName,
           fileType: requestData.fileType,
           fileSize: 0,
-          gcsUrl: '',
           status: 'failed',
           error: error instanceof Error ? error.message : 'Upload failed',
           uploadedAt: new Date()
