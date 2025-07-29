@@ -2,15 +2,15 @@ import { Storage } from '@google-cloud/storage';
 
 // Debug environment variables (without exposing sensitive data)
 console.log('🔧 GCS Configuration Debug:');
-console.log('📋 Project ID:', process.env.GOOGLE_CLOUD_PROJECT_ID ? '✅ Set' : '❌ Missing');
-console.log('📋 Bucket Name:', process.env.GOOGLE_CLOUD_BUCKET_NAME ? '✅ Set' : '❌ Missing');
+console.log('📋 Project ID:', process.env.PROJECT_ID ? '✅ Set' : '❌ Missing');
+console.log('📋 Bucket Name:', process.env.BUCKET_NAME ? '✅ Set' : '❌ Missing');
 console.log('📋 Client Email:', process.env.CLIENT_EMAIL ? '✅ Set' : '❌ Missing');
 console.log('📋 Private Key:', process.env.PRIVATE_KEY ? '✅ Set' : '❌ Missing');
 console.log('📋 Private Key ID:', process.env.PRIVATE_KEY_ID ? '✅ Set' : '❌ Missing');
 
 // Initialize Google Cloud Storage with hardcoded credentials from .env
 const storage = new Storage({
-  projectId: process.env.GOOGLE_CLOUD_PROJECT_ID,
+  projectId: process.env.PROJECT_ID,
   credentials: {
     type: process.env.TYPE || 'service_account',
     project_id: process.env.PROJECT_ID,
@@ -21,7 +21,7 @@ const storage = new Storage({
   },
 });
 
-const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'mortdash-vault';
+const bucketName = process.env.BUCKET_NAME || 'mortdash-vault';
 
 export class GCSAPI {
   private bucket;
