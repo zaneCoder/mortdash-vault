@@ -3,10 +3,28 @@ import { Storage } from '@google-cloud/storage';
 // Debug environment variables (without exposing sensitive data)
 console.log('🔧 GCS Configuration Debug:');
 console.log('📋 Project ID:', process.env.PROJECT_ID ? '✅ Set' : '❌ Missing');
-console.log('📋 Bucket Name:', process.env.BUCKET_NAME ? '✅ Set' : '❌ Missing');
+console.log('📋 Bucket Name:', process.env.GOOGLE_CLOUD_BUCKET_NAME ? '✅ Set' : '❌ Missing');
 console.log('📋 Client Email:', process.env.CLIENT_EMAIL ? '✅ Set' : '❌ Missing');
 console.log('📋 Private Key:', process.env.PRIVATE_KEY ? '✅ Set' : '❌ Missing');
 console.log('📋 Private Key ID:', process.env.PRIVATE_KEY_ID ? '✅ Set' : '❌ Missing');
+
+// Check if all required environment variables are present
+const requiredEnvVars = {
+  PROJECT_ID: process.env.PROJECT_ID,
+  GOOGLE_CLOUD_BUCKET_NAME: process.env.GOOGLE_CLOUD_BUCKET_NAME,
+  CLIENT_EMAIL: process.env.CLIENT_EMAIL,
+  PRIVATE_KEY: process.env.PRIVATE_KEY,
+  PRIVATE_KEY_ID: process.env.PRIVATE_KEY_ID,
+};
+
+const missingVars = Object.entries(requiredEnvVars)
+  .filter(([key, value]) => !value)
+  .map(([key]) => key);
+
+if (missingVars.length > 0) {
+  console.error('❌ Missing required GCS environment variables:', missingVars);
+  console.error('💡 Please set these environment variables in your deployment platform');
+}
 
 // Initialize Google Cloud Storage with hardcoded credentials from .env
 const storage = new Storage({
@@ -21,7 +39,7 @@ const storage = new Storage({
   },
 });
 
-const bucketName = process.env.BUCKET_NAME || 'mortdash-vault';
+const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'mortdash-vault';
 
 export class GCSAPI {
   private bucket;
@@ -35,6 +53,7 @@ export class GCSAPI {
       console.log('🚀 Starting GCS upload for:', fileName);
       console.log('📦 File size:', fileBuffer.length, 'bytes');
       console.log('📋 Content type:', contentType);
+      console.log('📋 Bucket name:', bucketName);
       
       const file = this.bucket.file(fileName);
       
@@ -62,6 +81,12 @@ export class GCSAPI {
         console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
       }
       
+      // Check for authentication errors
+      if ((error as Error).message?.includes('authentication') || (error as Error).message?.includes('unauthorized')) {
+        console.error('🔐 Authentication Error detected');
+        console.error('💡 Solution: Check your service account credentials and permissions');
+      }
+      
       throw new Error('Failed to upload file to Google Cloud Storage');
     }
   }
@@ -76,6 +101,7 @@ export class GCSAPI {
       console.log('🚀 Starting GCS upload with progress for:', fileName);
       console.log('📦 File size:', fileBuffer.length, 'bytes');
       console.log('📋 Content type:', contentType);
+      console.log('📋 Bucket name:', bucketName);
       
       const file = this.bucket.file(fileName);
       
@@ -108,6 +134,12 @@ export class GCSAPI {
       if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED')) {
         console.error('🔐 OpenSSL Error detected - this is likely a private key format issue');
         console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
+      }
+      
+      // Check for authentication errors
+      if ((error as Error).message?.includes('authentication') || (error as Error).message?.includes('unauthorized')) {
+        console.error('🔐 Authentication Error detected');
+        console.error('💡 Solution: Check your service account credentials and permissions');
       }
       
       throw new Error('Failed to upload file to Google Cloud Storage');
