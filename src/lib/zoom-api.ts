@@ -257,4 +257,30 @@ export class ZoomAPI {
       throw error;
     }
   }
+
+  async getUserInfo(userId: string = 'me'): Promise<any> {
+    try {
+      const accessToken = await this.getAccessToken();
+      const response = await axios.get(`https://api.zoom.us/v2/users/${userId}`, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        }
+      });
+      if (response.data) {
+        console.log('✅ User info fetched successfully');
+        console.log('User data:', response.data);
+        return response.data;
+      } else {
+        throw new Error('No user data in response');
+      }
+    } catch (error: any) {
+      console.error('Error fetching user info:', error.response?.status);
+      console.log('Error details:', error.message);
+      if (error.response?.data) {
+        console.log('Error response:', error.response.data);
+      }
+      throw error;
+    }
+  }
 }

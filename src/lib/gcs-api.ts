@@ -50,23 +50,19 @@ export class GCSAPI {
     try {
       const file = this.bucket.file(fileName);
       
-      // Simulate progress for small files
-      if (onProgress) {
-        onProgress(10);
-        setTimeout(() => onProgress(50), 100);
-        setTimeout(() => onProgress(90), 200);
-      }
-
+      // Use resumable upload for progress tracking
       await file.save(fileBuffer, {
         metadata: {
           contentType: contentType,
         },
-        resumable: false,
+        resumable: true,
+        onUploadProgress: (progressEvent: any) => {
+          if (onProgress && progressEvent.totalBytes) {
+            const progress = Math.round((progressEvent.bytesWritten / progressEvent.totalBytes) * 100);
+            onProgress(progress);
+          }
+        },
       });
-
-      if (onProgress) {
-        onProgress(100);
-      }
 
       // Return the file URL (will be private, use signed URLs for access)
       return `gs://${bucketName}/${fileName}`;
