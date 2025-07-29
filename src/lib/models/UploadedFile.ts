@@ -6,7 +6,7 @@ export interface IUploadedFile extends Document {
   fileName: string;
   fileType: string;
   fileSize: number;
-  gcsUrl?: string; // Make optional since failed uploads won't have a URL
+  gcsUrl: string;
   uploadedAt: Date;
   status: 'completed' | 'failed';
   error?: string;
@@ -41,7 +41,7 @@ const UploadedFileSchema = new Schema<IUploadedFile>({
   },
   gcsUrl: {
     type: String,
-    required: false
+    required: true
   },
   uploadedAt: {
     type: Date,

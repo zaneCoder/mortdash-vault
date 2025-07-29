@@ -26,27 +26,6 @@ if (missingVars.length > 0) {
   console.error('💡 Please set these environment variables in your deployment platform');
 }
 
-// Helper function to properly format private key
-function formatPrivateKey(privateKey: string): string {
-  if (!privateKey) return '';
-  
-  // Remove any existing formatting
-  let formatted = privateKey
-    .replace(/\\n/g, '\n')
-    .replace(/\\r/g, '\r')
-    .replace(/\\t/g, '\t');
-  
-  // Ensure proper PEM format
-  if (!formatted.includes('-----BEGIN PRIVATE KEY-----')) {
-    console.warn('⚠️ Private key may not be in proper PEM format');
-  }
-  
-  // Remove any extra whitespace
-  formatted = formatted.trim();
-  
-  return formatted;
-}
-
 // Initialize Google Cloud Storage with hardcoded credentials from .env
 const storage = new Storage({
   projectId: process.env.PROJECT_ID,
@@ -54,7 +33,7 @@ const storage = new Storage({
     type: process.env.TYPE || 'service_account',
     project_id: process.env.PROJECT_ID,
     private_key_id: process.env.PRIVATE_KEY_ID,
-    private_key: formatPrivateKey(process.env.PRIVATE_KEY || ''),
+    private_key: process.env.PRIVATE_KEY?.replace(/\\n/g, '\n'),
     client_email: process.env.CLIENT_EMAIL,
     client_id: process.env.CLIENT_ID,
   },
@@ -97,13 +76,9 @@ export class GCSAPI {
       });
       
       // Check for specific OpenSSL errors
-      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED') || 
-          (error as Error).message?.includes('DECODER routines') ||
-          (error as Error).message?.includes('unsupported')) {
-        console.error('🔐 OpenSSL Error detected - this is a private key format issue');
+      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED')) {
+        console.error('🔐 OpenSSL Error detected - this is likely a private key format issue');
         console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
-        console.error('💡 The private key should be in PEM format with proper newlines');
-        console.error('💡 Example format: -----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----');
       }
       
       // Check for authentication errors
@@ -156,13 +131,9 @@ export class GCSAPI {
       });
       
       // Check for specific OpenSSL errors
-      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED') || 
-          (error as Error).message?.includes('DECODER routines') ||
-          (error as Error).message?.includes('unsupported')) {
-        console.error('🔐 OpenSSL Error detected - this is a private key format issue');
+      if ((error as Error).message?.includes('ERR_OSSL_UNSUPPORTED')) {
+        console.error('🔐 OpenSSL Error detected - this is likely a private key format issue');
         console.error('💡 Solution: Check that your PRIVATE_KEY environment variable is properly formatted');
-        console.error('💡 The private key should be in PEM format with proper newlines');
-        console.error('💡 Example format: -----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----');
       }
       
       // Check for authentication errors

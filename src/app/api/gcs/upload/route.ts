@@ -226,6 +226,7 @@ export async function POST(request: NextRequest) {
           fileName: requestData.fileName,
           fileType: requestData.fileType,
           fileSize: 0,
+          gcsUrl: '',
           status: 'failed',
           error: error instanceof Error ? error.message : 'Upload failed',
           uploadedAt: new Date()
