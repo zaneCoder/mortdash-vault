@@ -16,10 +16,13 @@ export async function POST(request: NextRequest) {
   let requestData: RequestData | undefined;
   
   try {
+    console.log('🚀 GCS Upload API called');
+    
     // Parse request data once and store it
     requestData = await request.json();
     
     if (!requestData) {
+      console.error('❌ No request data provided');
       return NextResponse.json(
         { error: 'Invalid request data' },
         { status: 400 }
@@ -27,6 +30,7 @@ export async function POST(request: NextRequest) {
     }
     
     const { fileUrl, fileName, fileType, meetingId, fileId } = requestData;
+    console.log('📋 Request data:', { fileUrl, fileName, fileType, meetingId, fileId });
 
     console.log('🚀 Starting GCS upload for file:', fileId);
     console.log('📋 File details:', { fileName, fileType, meetingId });
@@ -60,9 +64,12 @@ export async function POST(request: NextRequest) {
 
     // Get meeting recordings to get access token using relative URL
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+    console.log('🔍 Fetching meeting recordings from:', `${baseUrl}/api/zoom/meeting/${meetingId}`);
+    
     const recordingsResponse = await axios.get(`${baseUrl}/api/zoom/meeting/${meetingId}`);
 
     if (recordingsResponse.status !== 200) {
+      console.error('❌ Failed to get meeting recordings:', recordingsResponse.status);
       return NextResponse.json(
         { error: 'Failed to get meeting recordings' },
         { status: 500 }
@@ -71,11 +78,14 @@ export async function POST(request: NextRequest) {
 
     const recordings = recordingsResponse.data.recordings;
     if (!recordings.download_access_token) {
+      console.error('❌ No download access token available for this meeting');
       return NextResponse.json(
         { error: 'No download access token available for this meeting' },
         { status: 500 }
       );
     }
+
+    console.log('✅ Got meeting recordings with access token');
 
     // Get user information for the path
     let userPath = 'unknown';
@@ -121,6 +131,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Download file from Zoom with authentication using axios
+    console.log('📥 Downloading file from Zoom:', fileUrl);
     const fileResponse = await axios.get(fileUrl, {
       headers: {
         'Authorization': `Bearer ${recordings.download_access_token}`
@@ -129,6 +140,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (fileResponse.status !== 200) {
+      console.error('❌ Failed to download file from Zoom:', fileResponse.status);
       return NextResponse.json(
         { error: 'Failed to download file from Zoom' },
         { status: 500 }
@@ -148,7 +160,10 @@ export async function POST(request: NextRequest) {
                        fileType === 'M4A' ? 'audio/mp4' : 
                        'application/octet-stream';
 
+    console.log('📋 Content type:', contentType);
+
     // Upload to Google Cloud Storage with progress tracking
+    console.log('🚀 Starting GCS upload...');
     const gcsPath = await gcsAPI.uploadFileWithProgress(
       fileBuffer, 
       uniqueFileName, 
@@ -158,8 +173,12 @@ export async function POST(request: NextRequest) {
       }
     );
 
+    console.log('✅ GCS upload completed, getting signed URL...');
+
     // Get a signed URL for the uploaded file
     const signedUrl = await gcsAPI.getFileUrl(uniqueFileName);
+
+    console.log('✅ Got signed URL, saving to MongoDB...');
 
     // Save successful upload record to MongoDB
     try {
@@ -213,6 +232,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error: unknown) {
     console.error('❌ GCS upload error:', error);
+    console.error('❌ Error details:', {
+      name: (error as Error).name,
+      message: (error as Error).message,
+      stack: (error as Error).stack
+    });
     
     // Try to save failed upload record using stored request data
     try {
@@ -226,7 +250,6 @@ export async function POST(request: NextRequest) {
           fileName: requestData.fileName,
           fileType: requestData.fileType,
           fileSize: 0,
-          gcsUrl: '',
           status: 'failed',
           error: error instanceof Error ? error.message : 'Upload failed',
           uploadedAt: new Date()
