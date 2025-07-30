@@ -90,11 +90,12 @@ export default function FilesPage() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [showMiniProgress, setShowMiniProgress] = useState(false);
   const [playingFile, setPlayingFile] = useState<RecordingFile | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [loadingActions, setLoadingActions] = useState<Set<string>>(new Set());
   const [uploadedFiles, setUploadedFiles] = useState<Set<string>>(new Set());
   const [isCheckingUploads, setIsCheckingUploads] = useState(false);
   const [isNavigatingBack, setIsNavigatingBack] = useState(false);
+  const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
+  const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
+  const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: number }>({});
 
   const checkUploadedFiles = useCallback(async () => {
     if (!meetingId) return;
@@ -202,49 +203,96 @@ export default function FilesPage() {
       console.log('📥 Starting download for file:', file.id);
       console.log('🔗 Download URL:', file.download_url);
       console.log('📋 Meeting ID:', recordings?.id);
-      setIsDownloading(true);
+      console.log('📋 Meeting Topic:', recordings?.topic);
+      console.log('📋 File Type:', file.file_type);
+      console.log('📋 File Extension:', file.file_extension);
       
-      const response = await fetch('/api/zoom/download', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileUrl: file.download_url,
-          meetingId: recordings?.id
-        }),
+      const requestBody = {
+        fileUrl: file.download_url,
+        meetingId: recordings?.id,
+        fileName: `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`
+      };
+      
+      console.log('📤 Sending download request with body:', requestBody);
+      
+      // Use XMLHttpRequest for progress tracking
+      return new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        xhr.open('POST', '/api/zoom/download', true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        
+        // Track download progress
+        xhr.onprogress = (event) => {
+          if (event.lengthComputable) {
+            const progress = Math.round((event.loaded / event.total) * 100);
+            setDownloadProgress(prev => ({ ...prev, [file.id]: progress }));
+            console.log(`📥 Download progress for ${file.id}: ${progress}%`);
+          }
+        };
+        
+        xhr.onload = async () => {
+          if (xhr.status === 200) {
+            try {
+              // Create blob from response
+              const blob = new Blob([xhr.response]);
+              console.log('📦 Blob size:', blob.size, 'bytes');
+              
+              // Trigger download
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`;
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+              document.body.removeChild(a);
+              
+              console.log('✅ Download completed for file:', file.id);
+              toast.success(`Downloaded ${file.file_type} file successfully!`);
+              setDownloadProgress(prev => ({ ...prev, [file.id]: 100 }));
+              
+              resolve();
+            } catch (error) {
+              console.error('❌ Download processing failed:', error);
+              toast.error('Download processing failed. Please try again.');
+              reject(error);
+            }
+          } else {
+            console.error('❌ Download failed with status:', xhr.status);
+            toast.error('Download failed. Please try again.');
+            reject(new Error(`Download failed with status: ${xhr.status}`));
+          }
+        };
+        
+        xhr.onerror = () => {
+          console.error('❌ Download network error');
+          toast.error('Download failed. Please try again.');
+          reject(new Error('Network error during download'));
+        };
+        
+        xhr.responseType = 'blob';
+        xhr.send(JSON.stringify(requestBody));
       });
-
-      console.log('📡 Download response status:', response.status);
-      console.log('📡 Download response ok:', response.ok);
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error('❌ Download error response:', error);
-        throw new Error(error.error || 'Download failed');
-      }
-
-      // Create a blob from the response and trigger download
-      const blob = await response.blob();
-      console.log('📦 Blob size:', blob.size, 'bytes');
-      
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      console.log('✅ Download completed for file:', file.id);
-      toast.success(`Downloaded ${file.file_type} file successfully!`);
       
     } catch (error) {
       console.error('❌ Download failed for file:', file.id, error);
       toast.error('Download failed. Please try again.');
     } finally {
-      setIsDownloading(false);
+      // Remove file from downloading set
+      setDownloadingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.id);
+        return newSet;
+      });
+      // Clear progress after a delay
+      setTimeout(() => {
+        setDownloadProgress(prev => {
+          const newProgress = { ...prev };
+          delete newProgress[file.id];
+          return newProgress;
+        });
+      }, 2000);
     }
   };
 
@@ -259,6 +307,12 @@ export default function FilesPage() {
   };
 
   const uploadFile = async (file: RecordingFile) => {
+    // Prevent duplicate uploads
+    if (uploadingFiles.has(file.id)) {
+      console.log('⚠️ Upload already in progress for file:', file.id);
+      return;
+    }
+
     const uploadFile: UploadFile = {
       id: file.id,
       name: `${file.file_type}_${file.id}.${file.file_extension}`,
@@ -274,6 +328,9 @@ export default function FilesPage() {
 
     try {
       console.log('🚀 Starting GCS upload for file:', file.id);
+      
+      // Add file to uploading set
+      setUploadingFiles(prev => new Set([...prev, file.id]));
       
       // Start progress simulation based on file size with smoother animation
       const fileSizeMB = file.file_size / (1024 * 1024);
@@ -336,6 +393,13 @@ export default function FilesPage() {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       console.error('❌ GCS upload failed for file:', file.id, error);
       updateUploadProgress(file.id, 0, 'error', errorMessage);
+    } finally {
+      // Remove file from uploading set
+      setUploadingFiles(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(file.id);
+        return newSet;
+      });
     }
   };
 
@@ -343,14 +407,14 @@ export default function FilesPage() {
     if (!recordings) return;
 
     const allFiles = recordings.recording_files;
-    const filesToUpload = allFiles.filter(file => !uploadedFiles.has(file.id));
+    const filesToUpload = allFiles.filter(file => !uploadedFiles.has(file.id) && !uploadingFiles.has(file.id));
     
     if (filesToUpload.length === 0) {
-      toast.success('All files have already been uploaded!');
+      toast.success('All files have already been uploaded or are currently uploading!');
       return;
     }
     
-    console.log('🚀 Starting bulk GCS upload for', filesToUpload.length, 'files');
+    console.log('🚀 Starting simultaneous download/upload for', filesToUpload.length, 'files');
 
     // Initialize upload files
     const uploadFilesList: UploadFile[] = filesToUpload.map(file => ({
@@ -367,13 +431,16 @@ export default function FilesPage() {
     setShowMiniProgress(false);
 
     try {
-      for (let i = 0; i < filesToUpload.length; i++) {
-        const file = filesToUpload[i];
-        console.log(`📤 Uploading file ${i + 1}/${filesToUpload.length}:`, file.file_type);
+      // Add all files to uploading set immediately
+      setUploadingFiles(prev => new Set([...prev, ...filesToUpload.map(f => f.id)]));
+      
+      // Start all uploads simultaneously
+      const uploadPromises = filesToUpload.map(async (file, index) => {
+        console.log(`📤 Starting simultaneous upload ${index + 1}/${filesToUpload.length}:`, file.file_type);
         
         updateUploadProgress(file.id, 0, 'uploading');
         
-        // Start progress simulation for this file with smoother animation
+        // Start progress simulation for this file
         const fileSizeMB = file.file_size / (1024 * 1024);
         const estimatedTimeMs = fileSizeMB * 800;
         const updateInterval = Math.max(50, estimatedTimeMs / 100);
@@ -388,41 +455,75 @@ export default function FilesPage() {
           );
         }, updateInterval);
 
-        const response = await fetch('/api/gcs/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileUrl: file.download_url,
-            fileName: `${file.file_type}_${file.id}.${file.file_extension}`,
-            fileType: file.file_type,
-            meetingId: recordings.id,
-            fileId: file.id
-          }),
-        });
+        try {
+          const response = await fetch('/api/gcs/upload', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fileUrl: file.download_url,
+              fileName: `${file.file_type}_${file.id}.${file.file_extension}`,
+              fileType: file.file_type,
+              meetingId: recordings.id,
+              fileId: file.id
+            }),
+          });
 
-        clearInterval(progressTimer);
+          clearInterval(progressTimer);
 
-        if (!response.ok) {
-          const error = await response.json();
-          updateUploadProgress(file.id, 0, 'error', error.error || `Upload failed for ${file.file_type} file`);
-          throw new Error(error.error || `Upload failed for ${file.file_type} file`);
+          if (!response.ok) {
+            const error = await response.json();
+            updateUploadProgress(file.id, 0, 'error', error.error || `Upload failed for ${file.file_type} file`);
+            throw new Error(error.error || `Upload failed for ${file.file_type} file`);
+          }
+
+          const result = await response.json();
+          console.log(`✅ Uploaded ${file.file_type} file:`, result);
+          
+          // Smooth completion animation
+          for (let i = 85; i <= 100; i += 2) {
+            await new Promise(resolve => setTimeout(resolve, 20));
+            updateUploadProgress(file.id, i, 'uploading');
+          }
+          
+          updateUploadProgress(file.id, 100, 'completed');
+          
+          return { success: true, file };
+        } catch (error) {
+          clearInterval(progressTimer);
+          console.error(`❌ Upload failed for ${file.file_type} file:`, error);
+          updateUploadProgress(file.id, 0, 'error', error instanceof Error ? error.message : 'Upload failed');
+          return { success: false, file, error };
         }
+      });
 
-        const result = await response.json();
-        console.log(`✅ Uploaded ${file.file_type} file:`, result);
-        
-        // Smooth completion animation
-        for (let i = 85; i <= 100; i += 2) {
-          await new Promise(resolve => setTimeout(resolve, 20));
-          updateUploadProgress(file.id, i, 'uploading');
-        }
-        
-        updateUploadProgress(file.id, 100, 'completed');
+      // Wait for all uploads to complete
+      const results = await Promise.allSettled(uploadPromises);
+      
+      // Process results
+      const successfulUploads = results.filter(result => 
+        result.status === 'fulfilled' && result.value.success
+      ).length;
+      
+      const failedUploads = results.filter(result => 
+        result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success)
+      ).length;
+
+      // Remove all files from uploading set
+      setUploadingFiles(prev => {
+        const newSet = new Set(prev);
+        filesToUpload.forEach(file => newSet.delete(file.id));
+        return newSet;
+      });
+
+      if (successfulUploads > 0) {
+        toast.success(`Successfully uploaded ${successfulUploads} files to Google Cloud Storage!`);
       }
-
-      toast.success(`Successfully uploaded ${filesToUpload.length} files to Google Cloud Storage!`);
+      
+      if (failedUploads > 0) {
+        toast.error(`${failedUploads} files failed to upload. Please try again.`);
+      }
       
       // Refresh uploaded files list
       await checkUploadedFiles();
@@ -431,35 +532,14 @@ export default function FilesPage() {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       console.error('❌ Bulk upload failed:', error);
       toast.error(`Upload failed: ${errorMessage}`);
+      
+      // Remove all files from uploading set on error
+      setUploadingFiles(prev => {
+        const newSet = new Set(prev);
+        filesToUpload.forEach(file => newSet.delete(file.id));
+        return newSet;
+      });
     }
-  };
-
-  const playFile = (file: RecordingFile) => {
-    console.log('🎬 Playing file:', file.file_type);
-    console.log('🔗 Original play URL:', file.play_url);
-    console.log('🔑 Passcode available:', !!recordings?.recording_play_passcode);
-    console.log('🔑 Download access token available:', !!recordings?.download_access_token);
-    
-    let authenticatedPlayUrl = file.play_url;
-    
-    // Add passcode to play URL if available
-    if (recordings?.recording_play_passcode && recordings.recording_play_passcode !== '') {
-      authenticatedPlayUrl = `${file.play_url}?pwd=${recordings.recording_play_passcode}`;
-      console.log('🔗 Play URL with passcode:', authenticatedPlayUrl);
-    }
-    
-    // Add download access token for authenticated access
-    if (recordings?.download_access_token) {
-      const separator = authenticatedPlayUrl.includes('?') ? '&' : '?';
-      authenticatedPlayUrl = `${authenticatedPlayUrl}${separator}access_token=${recordings.download_access_token}`;
-      console.log('🔗 Play URL with access token:', authenticatedPlayUrl);
-    }
-    
-    const fileWithAuth = {
-      ...file,
-      play_url: authenticatedPlayUrl
-    };
-    setPlayingFile(fileWithAuth);
   };
 
   const closePlayer = () => {
@@ -499,17 +579,31 @@ export default function FilesPage() {
     setUploadFiles([]);
   };
 
-  const handleActionWithLoading = (action: () => void, fileId: string) => {
-    setLoadingActions(prev => new Set(prev).add(fileId));
-    action();
-    // Remove loading state after a short delay
-    setTimeout(() => {
-      setLoadingActions(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(fileId);
-        return newSet;
-      });
-    }, 1000);
+  const handleDownloadClick = (file: RecordingFile, event: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent duplicate downloads
+    if (downloadingFiles.has(file.id)) {
+      console.log('⚠️ Download already in progress for file:', file.id);
+      toast.error('Download already in progress for this file');
+      return;
+    }
+
+    // Immediately set loading state to prevent spam clicking
+    setDownloadingFiles(prev => new Set([...prev, file.id]));
+    setDownloadProgress(prev => ({ ...prev, [file.id]: 0 }));
+
+    // Force immediate visual feedback
+    const button = event.currentTarget;
+    if (button) {
+      button.disabled = true;
+      button.style.backgroundColor = '#eff6ff';
+      button.style.borderColor = '#bfdbfe';
+      button.style.color = '#1d4ed8';
+      button.style.opacity = '0.75';
+      button.style.cursor = 'not-allowed';
+    }
+
+    // Start the download process
+    downloadFile(file);
   };
 
   if (isLoading) {
@@ -610,11 +704,11 @@ export default function FilesPage() {
                 <Button
                   onClick={uploadAllFiles}
                   className={uploadedFiles.size === recordings.recording_files.length ? "bg-green-600 hover:bg-green-700" : "bg-green-600 hover:bg-green-700"}
-                  disabled={uploadedFiles.size === recordings.recording_files.length || isCheckingUploads || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')}
+                  disabled={uploadedFiles.size === recordings.recording_files.length || isCheckingUploads || uploadingFiles.size > 0}
                 >
                   {uploadedFiles.size === recordings.recording_files.length ? (
                     <CheckCircle className="w-4 h-4 mr-2" />
-                  ) : uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending') ? (
+                  ) : uploadingFiles.size > 0 ? (
                     <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -622,7 +716,7 @@ export default function FilesPage() {
                   ) : (
                     <Upload className="w-4 h-4 mr-2" />
                   )}
-                  {uploadedFiles.size === recordings.recording_files.length ? 'All Files Uploaded' : uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending') ? 'Uploading...' : 'Upload All Files'}
+                  {uploadedFiles.size === recordings.recording_files.length ? 'All Files Uploaded' : uploadingFiles.size > 0 ? 'Uploading...' : 'Upload All Files'}
                 </Button>
               </div>
             </div>
@@ -698,7 +792,6 @@ export default function FilesPage() {
               <div className="space-y-4">
                 {recordings.recording_files.map((file) => {
                   const fileDateTime = formatDateTime(file.recording_start);
-                  const isActionLoading = loadingActions.has(file.id);
                   
                   return (
                     <Card key={file.id} className="hover:shadow-md transition-shadow">
@@ -724,54 +817,45 @@ export default function FilesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Button
-                              onClick={() => handleActionWithLoading(() => playFile(file), file.id)}
+                              onClick={(event) => handleDownloadClick(file, event)}
                               variant="outline"
                               size="sm"
-                              disabled={isActionLoading && loadingActions.has(file.id)}
+                              disabled={downloadingFiles.has(file.id)}
+                              className={downloadingFiles.has(file.id) ? "bg-blue-50 border-blue-200 text-blue-700 cursor-not-allowed opacity-75" : ""}
                             >
-                              {isActionLoading && loadingActions.has(file.id) ? (
-                                <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                </svg>
-                              ) : (
-                                <Play className="w-4 h-4 mr-2" />
-                              )}
-                              Play
-                            </Button>
-                            <Button
-                              onClick={() => handleActionWithLoading(() => downloadFile(file), file.id)}
-                              variant="outline"
-                              size="sm"
-                              disabled={(isActionLoading && loadingActions.has(file.id)) || isDownloading}
-                            >
-                              {(isActionLoading && loadingActions.has(file.id)) || isDownloading ? (
-                                <svg className="animate-spin h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              {downloadingFiles.has(file.id) ? (
+                                <svg className="animate-spin h-4 w-4 mr-2 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                               ) : (
                                 <Download className="w-4 h-4 mr-2" />
                               )}
-                              Download
+                              {downloadingFiles.has(file.id) 
+                                ? downloadProgress[file.id] 
+                                  ? `Downloading ${downloadProgress[file.id]}%` 
+                                  : 'Downloading...' 
+                                : 'Download'
+                              }
                             </Button>
                             <Button
-                              onClick={() => handleActionWithLoading(() => uploadFile(file), file.id)}
+                              onClick={() => uploadFile(file)}
+                              variant="outline"
                               size="sm"
-                              className={uploadedFiles.has(file.id) ? "bg-green-600 hover:bg-green-700" : "bg-purple-600 hover:bg-purple-700"}
-                              disabled={uploadedFiles.has(file.id) || (isActionLoading && loadingActions.has(file.id)) || isCheckingUploads}
+                              className={uploadedFiles.has(file.id) ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100" : ""}
+                              disabled={uploadedFiles.has(file.id) || isCheckingUploads || uploadingFiles.has(file.id)}
                             >
                               {uploadedFiles.has(file.id) ? (
                                 <CheckCircle className="w-4 h-4 mr-2" />
-                              ) : (isActionLoading && loadingActions.has(file.id)) ? (
-                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              ) : uploadingFiles.has(file.id) ? (
+                                <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                 </svg>
                               ) : (
                                 <Upload className="w-4 h-4 mr-2" />
                               )}
-                              {uploadedFiles.has(file.id) ? 'Uploaded' : 'Upload'}
+                              {uploadedFiles.has(file.id) ? 'Uploaded' : uploadingFiles.has(file.id) ? 'Uploading...' : 'Upload'}
                             </Button>
                           </div>
                         </div>
@@ -851,15 +935,23 @@ export default function FilesPage() {
                     </Button>
                     <Button
                       onClick={() => downloadFile(playingFile)}
-                      disabled={isDownloading}
+                      disabled={downloadingFiles.has(playingFile.id)}
                       variant="outline"
                     >
-                      {isDownloading ? (
-                        <div className="animate-spin h-4 w-4 mr-2" />
+                      {downloadingFiles.has(playingFile.id) ? (
+                        <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
                       ) : (
                         <Download className="w-4 h-4 mr-2" />
                       )}
-                      {isDownloading ? 'Downloading...' : 'Download'}
+                      {downloadingFiles.has(playingFile.id) 
+                        ? downloadProgress[playingFile.id] 
+                          ? `Downloading ${downloadProgress[playingFile.id]}%` 
+                          : 'Downloading...' 
+                        : 'Download'
+                      }
                     </Button>
                   </div>
                 </div>
@@ -888,10 +980,23 @@ export default function FilesPage() {
                     </Button>
                     <Button
                       onClick={() => downloadFile(playingFile)}
+                      disabled={downloadingFiles.has(playingFile.id)}
                       variant="outline"
                     >
-                      <Download className="w-4 h-4 mr-2" />
-                      Download
+                      {downloadingFiles.has(playingFile.id) ? (
+                        <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      {downloadingFiles.has(playingFile.id) 
+                        ? downloadProgress[playingFile.id] 
+                          ? `Downloading ${downloadProgress[playingFile.id]}%` 
+                          : 'Downloading...' 
+                        : 'Download'
+                      }
                     </Button>
                   </div>
                 </div>

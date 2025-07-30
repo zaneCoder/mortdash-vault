@@ -28,7 +28,7 @@ export function UploadProgressModal({
   isOpen, 
   onClose, 
   files, 
-  onUploadComplete 
+  onUploadComplete
 }: UploadProgressModalProps) {
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>(files);
   const [overallProgress, setOverallProgress] = useState(0);
@@ -39,6 +39,7 @@ export function UploadProgressModal({
 
   useEffect(() => {
     if (uploadFiles.length > 0) {
+      // Simple overall progress calculation
       const totalProgress = uploadFiles.reduce((sum, file) => sum + file.progress, 0);
       const averageProgress = totalProgress / uploadFiles.length;
       setOverallProgress(averageProgress);
@@ -73,17 +74,33 @@ export function UploadProgressModal({
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return 'Completed';
-      case 'error':
-        return 'Failed';
-      case 'uploading':
-        return 'Uploading...';
-      default:
-        return 'Pending';
+  const getStatusText = (status: string, fileId: string) => {
+    const file = uploadFiles.find(f => f.id === fileId);
+    if (!file) return 'Unknown';
+
+    if (status === 'completed') {
+      return 'Complete';
     }
+    if (status === 'error') {
+      return 'Failed';
+    }
+    if (status === 'uploading') {
+      return 'Uploading';
+    }
+    
+    return 'Pending';
+  };
+
+  const getCurrentProgress = (fileId: string) => {
+    const file = uploadFiles.find(f => f.id === fileId);
+    if (!file) return 0;
+
+    // If file is completed, show 100%
+    if (file.status === 'completed') {
+      return 100;
+    }
+    
+    return file.progress;
   };
 
   const formatFileSize = (bytes: number) => {
@@ -150,13 +167,14 @@ export function UploadProgressModal({
                             </div>
                           </div>
                           <div className="text-lg font-bold text-blue-600 ml-4">
-                            {file.progress}%
+                            {getCurrentProgress(file.id).toFixed(2)}%
                           </div>
                         </div>
                         
+                        {/* Single Progress Bar */}
                         <div className="mb-4">
                           <Progress 
-                            value={file.progress} 
+                            value={getCurrentProgress(file.id)} 
                             className="w-full h-3 bg-gray-200" 
                           />
                         </div>
@@ -168,7 +186,7 @@ export function UploadProgressModal({
                             file.status === 'uploading' ? 'text-blue-600' :
                             'text-gray-500'
                           }`}>
-                            {getStatusText(file.status)}
+                            {getStatusText(file.status, file.id)}
                           </span>
                           {file.error && (
                             <span className="text-sm text-red-500 truncate max-w-64">

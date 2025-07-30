@@ -38,6 +38,6 @@ export async function GET(request: NextRequest) {
 }
 
 // Also support HEAD requests for lightweight health checks
-export async function HEAD(request: NextRequest) {
+export async function HEAD() {
   return new NextResponse(null, { status: 200 });
 }

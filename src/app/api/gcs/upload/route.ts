@@ -209,6 +209,9 @@ export async function POST(request: NextRequest) {
       console.log('📋 Created UploadedFile instance:', uploadedFile);
       await uploadedFile.save();
       console.log('✅ Upload record saved to MongoDB successfully');
+      
+      // Upload records are saved to mortdash-vault collection, not logs
+      // No need to create separate log entry for uploads
     } catch (dbError) {
       console.error('❌ Failed to save upload record to MongoDB:', dbError);
       console.error('❌ Error details:', {
