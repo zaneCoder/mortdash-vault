@@ -3,8 +3,14 @@ import { ZoomAPI } from '@/lib/zoom-api';
 
 export async function POST(request: NextRequest) {
   try {
-    const { fileUrl, meetingId } = await request.json();
-
+    const body = await request.json();
+    const { fileUrl, meetingId, fileName } = body;
+    
+    console.log('📥 Download API called with parameters:');
+    console.log('📋 fileUrl:', fileUrl);
+    console.log('📋 meetingId:', meetingId);
+    console.log('📋 fileName:', fileName);
+    
     if (!fileUrl || !meetingId) {
       return NextResponse.json(
         { error: 'Missing required parameters: fileUrl, meetingId' },
@@ -42,6 +48,32 @@ export async function POST(request: NextRequest) {
 
     const fileBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(fileBuffer);
+
+    // Create log entry for successful download
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+      const logData = {
+        action: 'download',
+        meetingId: meetingId,
+        fileName: fileName,
+        fileSize: buffer.length,
+        status: 'success',
+        details: `File downloaded from Zoom: ${fileUrl}`
+      };
+      
+      console.log('📝 Creating download log entry with data:', logData);
+      
+      await fetch(`${baseUrl}/api/logs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(logData),
+      });
+      console.log('✅ Download log entry created');
+    } catch (logError) {
+      console.warn('⚠️ Failed to create download log entry:', logError);
+    }
 
     // Return the file as a download
     return new NextResponse(buffer, {

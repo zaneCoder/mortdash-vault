@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Home, FileText } from 'lucide-react';
+import { Home, FileText, Activity } from 'lucide-react';
 
 export function TopNavigation() {
   const pathname = usePathname();
@@ -41,6 +41,17 @@ export function TopNavigation() {
               </Button>
             </Link>
             
+            <Link href="/logs">
+              <Button
+                variant={pathname === '/logs' ? 'default' : 'ghost'}
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <Activity className="w-4 h-4" />
+                Logs
+              </Button>
+            </Link>
+            
             {pathname.startsWith('/files/') && (
               <div className="flex items-center gap-2">
                 <div className="w-px h-6 bg-border" />
@@ -57,7 +68,7 @@ export function TopNavigation() {
             )}
           </nav>
 
-          {/* Right side - could add user menu, settings, etc. */}
+          {/* Right side - empty for now */}
           <div className="flex items-center gap-2">
             <div className="text-xs text-muted-foreground">
               Zoom Recordings Manager

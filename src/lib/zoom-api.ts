@@ -288,4 +288,117 @@ export class ZoomAPI {
       throw error;
     }
   }
+
+  /**
+   * Delete a specific recording file from a meeting or webinar
+   * This is the SAFER option - only deletes the specific file, not all recordings
+   * 
+   * @param meetingId - The meeting ID or UUID
+   * @param recordingId - The specific recording ID to delete
+   * @param action - 'delete' (default) for permanent deletion or 'trash' to move to trash
+   * @returns Promise<boolean> - true if successful
+   */
+  async deleteRecordingFile(
+    meetingId: string | number, 
+    recordingId: string, 
+    action: 'delete' | 'trash' = 'delete'
+  ): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken();
+      
+      // Ensure meetingId is a string
+      const meetingIdStr = String(meetingId);
+      
+      // Double encode UUID if it starts with / or contains //
+      let encodedMeetingId = meetingIdStr;
+      if (meetingIdStr.startsWith('/') || meetingIdStr.includes('//')) {
+        encodedMeetingId = encodeURIComponent(encodeURIComponent(meetingIdStr));
+        console.log('🔐 Double-encoded meeting ID for UUID format');
+      }
+      
+      // Construct URL according to Zoom API specification
+      // Using the exact format from the documentation: DELETE /meetings/{meetingId}/recordings/{recordingId}
+      const url = `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings/${recordingId}`;
+      
+      const options = {
+        method: 'DELETE',
+        url: url,
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        params: {
+          action: action
+        }
+      };
+      
+      console.log('🗑️ Deleting specific recording file...');
+      console.log('📋 Meeting ID:', meetingIdStr);
+      console.log('📋 Recording ID:', recordingId);
+      console.log('📋 Action:', action);
+      console.log('📋 URL:', url);
+      
+      const response = await axios.request(options);
+      
+      if (response.status === 204) {
+        console.log('✅ Recording file deleted successfully');
+        return true;
+      } else {
+        console.log('⚠️ Unexpected response status:', response.status);
+        return false;
+      }
+      
+    } catch (error: unknown) {
+      console.error('❌ Failed to delete recording file:', error instanceof Error ? error.message : 'Unknown error');
+      
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        const status = axiosError.response?.status;
+        const data = axiosError.response?.data;
+        
+        console.log('Error response status:', status);
+        console.log('Error response data:', data);
+        
+        // Handle specific error codes according to Zoom API documentation
+        switch (status) {
+          case 400:
+            if (data && typeof data === 'object' && 'code' in data) {
+              const code = (data as { code: number }).code;
+              switch (code) {
+                case 1010:
+                  throw new Error('User does not belong to this account');
+                case 200:
+                  throw new Error('No permission to delete recordings. Please enable "The host can delete cloud recordings" setting in your Zoom account.');
+                case 3303:
+                  throw new Error('You can not delete an uncompleted meeting');
+                case 3310:
+                  throw new Error('This recording was selected for a simulive webinar. You cannot delete or trash it.');
+                default:
+                  throw new Error(`Bad request: ${code}`);
+              }
+            }
+            break;
+          case 404:
+            if (data && typeof data === 'object' && 'code' in data) {
+              const code = (data as { code: number }).code;
+              switch (code) {
+                case 1001:
+                  throw new Error('User does not exist or does not belong to this account');
+                case 3301:
+                  throw new Error('There is no recording for this meeting');
+                default:
+                  throw new Error(`Not found: ${code}`);
+              }
+            }
+            break;
+          case 429:
+            throw new Error('Too many requests. Please try again later.');
+          default:
+            throw new Error(`HTTP ${status}: Failed to delete recording file`);
+        }
+      }
+      
+      throw error;
+    }
+  }
 }

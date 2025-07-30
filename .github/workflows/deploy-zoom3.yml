@@ -12,7 +12,7 @@ env:
   REGION: us-west1
   SECRET_NAME: zooms3-develop
   SERVICE_ACCOUNT: 734979083625-compute@developer.gserviceaccount.com
-    
+
 jobs:
   deploy:
     name: ZoomS3 Development Deployment
@@ -28,8 +28,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "18"
+          cache: "npm"
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
@@ -45,10 +45,10 @@ jobs:
         id: secrets
         run: |
           echo "Fetching environment variables from Secret Manager"
-          
+
           # Fetch the .env content directly from the secret
           gcloud secrets versions access latest --secret="${{ env.SECRET_NAME }}" --project="${{ env.PROJECT_ID }}" > .env
-          
+
           # Verify the .env file format
           echo "Verifying .env file format..."
           if [ -s .env ]; then
@@ -183,18 +183,18 @@ jobs:
           # Get the URL with the tag parameter
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format="value(status.url)")
           TAG_URL="${SERVICE_URL}/health?tag=${{ steps.get-traffic.outputs.next }}"
-          
+
           echo "Testing health check URL: $TAG_URL"
-          
+
           # Add a small delay to allow the service to initialize
           echo "Waiting 10 seconds for service to initialize..."
           sleep 10
-          
+
           # Test the health check endpoint with retries
           MAX_RETRIES=3
           RETRY_COUNT=0
           SUCCESS=false
-          
+
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Attempt $((RETRY_COUNT + 1)) of $MAX_RETRIES"
             RESPONSE=$(curl -s -v "$TAG_URL" 2>&1)
@@ -217,7 +217,7 @@ jobs:
               fi
             fi
           done
-          
+
           if [ "$SUCCESS" = true ]; then
             echo "test_success=true" >> $GITHUB_OUTPUT
           else
@@ -232,7 +232,7 @@ jobs:
           gcloud run services update-traffic ${{ env.SERVICE_NAME }} \
             --region ${{ env.REGION }} \
             --to-tags ${{ steps.get-traffic.outputs.next }}=100
-          
+
           # Verify traffic migration
           echo "Verifying traffic migration..."
           TRAFFIC_INFO=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region ${{ env.REGION }} --format="value(status.traffic)")
