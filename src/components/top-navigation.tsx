@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Home, FileText, Activity } from 'lucide-react';
+import { Home, FileText, Activity, HardDrive } from 'lucide-react';
 
 export function TopNavigation() {
   const pathname = usePathname();
@@ -38,6 +38,17 @@ export function TopNavigation() {
               >
                 <Home className="w-4 h-4" />
                 Dashboard
+              </Button>
+            </Link>
+            
+            <Link href="/storage">
+              <Button
+                variant={pathname === '/storage' ? 'default' : 'ghost'}
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <HardDrive className="w-4 h-4" />
+                Storage
               </Button>
             </Link>
             
