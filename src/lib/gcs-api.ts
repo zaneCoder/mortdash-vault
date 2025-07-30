@@ -69,6 +69,32 @@ const storage = new Storage({
 
 const bucketName = process.env.GOOGLE_CLOUD_BUCKET_NAME || 'mortdash-vault';
 
+interface GCSFileDetails {
+  name: string;
+  size: number;
+  contentType: string;
+  timeCreated?: string;
+  updated?: string;
+  bucket?: string;
+  generation?: string | number;
+  metageneration?: string | number;
+  etag?: string;
+  owner?: {
+    entity?: string;
+    entityId?: string;
+  };
+  componentCount?: number;
+  checksum?: string;
+  md5Hash?: string;
+  cacheControl?: string;
+  contentDisposition?: string;
+  contentEncoding?: string;
+  contentLanguage?: string;
+  metadata: {
+    [key: string]: string;
+  };
+}
+
 export class GCSAPI {
   private bucket;
 
@@ -179,6 +205,45 @@ export class GCSAPI {
     }
   }
 
+  async listFilesWithDetails(): Promise<GCSFileDetails[]> {
+    try {
+      console.log('📋 Fetching detailed file list from GCS...');
+      const [files] = await this.bucket.getFiles();
+      
+      const fileDetails = await Promise.all(
+        files.map(async (file) => {
+          const [metadata] = await file.getMetadata();
+          return {
+            name: file.name,
+            size: typeof metadata.size === 'string' ? parseInt(metadata.size) : (metadata.size || 0),
+            contentType: metadata.contentType || 'application/octet-stream',
+            timeCreated: metadata.timeCreated,
+            updated: metadata.updated,
+            bucket: metadata.bucket,
+            generation: metadata.generation,
+            metageneration: metadata.metageneration,
+            etag: metadata.etag,
+            owner: metadata.owner,
+            componentCount: metadata.componentCount,
+            checksum: metadata.checksum as string,
+            md5Hash: metadata.md5Hash as string,
+            cacheControl: metadata.cacheControl as string,
+            contentDisposition: metadata.contentDisposition as string,
+            contentEncoding: metadata.contentEncoding as string,
+            contentLanguage: metadata.contentLanguage as string,
+            metadata: metadata.metadata || {}
+          } as GCSFileDetails;
+        })
+      );
+      
+      console.log(`✅ Successfully fetched ${fileDetails.length} file details from GCS`);
+      return fileDetails;
+    } catch (error) {
+      console.error('❌ Error fetching file details from GCS:', error);
+      throw new Error('Failed to fetch file details from Google Cloud Storage');
+    }
+  }
+
   async deleteFile(fileName: string): Promise<void> {
     try {
       await this.bucket.file(fileName).delete();
@@ -198,6 +263,27 @@ export class GCSAPI {
     } catch (error) {
       console.error('GCS get URL error:', error);
       throw new Error('Failed to get file URL from Google Cloud Storage');
+    }
+  }
+
+  async downloadFile(fileName: string): Promise<Buffer> {
+    try {
+      console.log(`📥 Downloading file from GCS: ${fileName}`);
+      
+      const file = this.bucket.file(fileName);
+      const [exists] = await file.exists();
+      
+      if (!exists) {
+        throw new Error(`File ${fileName} not found`);
+      }
+      
+      const [buffer] = await file.download();
+      
+      console.log(`✅ Successfully downloaded ${fileName} from GCS`);
+      return buffer;
+    } catch (error) {
+      console.error(`❌ Error downloading file ${fileName} from GCS:`, error);
+      throw new Error(`Failed to download file ${fileName} from Google Cloud Storage`);
     }
   }
 }
