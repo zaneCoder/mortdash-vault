@@ -1,13 +1,21 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
-import { Home, FileText, Activity, HardDrive } from 'lucide-react';
+import { Home, FileText, Activity, HardDrive, GraduationCap } from 'lucide-react';
 
 export function TopNavigation() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Create URL with preserved search parameters
+  const createUrlWithParams = (path: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    const queryString = params.toString();
+    return queryString ? `${path}?${queryString}` : path;
+  };
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 bg-background border-b">
@@ -30,7 +38,7 @@ export function TopNavigation() {
 
           {/* Navigation Links */}
           <nav className="flex items-center gap-2">
-            <Link href="/">
+            <Link href={createUrlWithParams('/')}>
               <Button
                 variant={pathname === '/' ? 'default' : 'ghost'}
                 size="sm"
@@ -41,7 +49,7 @@ export function TopNavigation() {
               </Button>
             </Link>
             
-            <Link href="/storage">
+            <Link href={createUrlWithParams('/storage')}>
               <Button
                 variant={pathname === '/storage' ? 'default' : 'ghost'}
                 size="sm"
@@ -52,7 +60,18 @@ export function TopNavigation() {
               </Button>
             </Link>
             
-            <Link href="/logs">
+            <Link href={createUrlWithParams('/courses')}>
+              <Button
+                variant={pathname === '/courses' ? 'default' : 'ghost'}
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <GraduationCap className="w-4 h-4" />
+                Courses
+              </Button>
+            </Link>
+            
+            <Link href={createUrlWithParams('/logs')}>
               <Button
                 variant={pathname === '/logs' ? 'default' : 'ghost'}
                 size="sm"

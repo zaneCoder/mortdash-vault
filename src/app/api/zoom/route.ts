@@ -4,36 +4,33 @@ import { ZoomAPI } from '@/lib/zoom-api';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { fromDate, toDate } = body;
-
+    const { userId, fromDate, toDate } = body;
+    
     console.log('📅 API received dates:', { fromDate, toDate });
-
-    // Check if ZOOM_KEY is configured
-    if (!process.env.ZOOM_KEY) {
-      return NextResponse.json(
-        { error: 'Missing ZOOM_KEY environment variable' },
-        { status: 500 }
-      );
-    }
-
+    console.log('👤 API received userId:', userId);
+    
     const zoomAPI = new ZoomAPI();
-
-    // Get access token first
     const accessToken = await zoomAPI.getAccessToken();
     
-    // Get recordings list with optional date parameters
-    const recordings = await zoomAPI.getListMeetings(accessToken, fromDate, toDate);
-
+    // Get recordings with validation
+    const recordings = await zoomAPI.getListMeetings(accessToken, fromDate, toDate, userId);
+    
     return NextResponse.json({
       success: true,
       meetings: recordings,
+      userValidation: recordings.userValidation,
       message: 'Successfully fetched recordings from Zoom API'
     });
-
+    
   } catch (error: unknown) {
-    console.error('API Error:', error);
+    console.error('❌ API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch recordings';
+    
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { 
+        success: false, 
+        error: errorMessage 
+      },
       { status: 500 }
     );
   }

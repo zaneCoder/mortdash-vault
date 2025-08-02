@@ -160,10 +160,10 @@ export class ZoomAPI {
   }
 
   // Get current user info
-  async getCurrentUser(token: string) {
+  async getCurrentUser(token: string, userId: string = 'me') {
     const options = {
       method: 'GET',
-      url: 'https://api.zoom.us/v2/users/me',
+      url: `https://api.zoom.us/v2/users/${userId}`,
       headers: {Authorization: `Bearer ${token}`}
     };
     
@@ -183,15 +183,81 @@ export class ZoomAPI {
     }
   }
 
-  async getListMeetings(token: string, fromDate?: string, toDate?: string) {
+  // Get all users in the account
+  async getAllUsers(token: string) {
     try {
-      // First get the current user info
-      const userInfo = await this.getCurrentUser(token);
-      const userId = userInfo.id;
-      console.log("Using user ID:", userId);
+      const options = {
+        method: 'GET',
+        url: 'https://api.zoom.us/v2/users',
+        headers: {Authorization: `Bearer ${token}`}
+      };
       
-      // Build URL with optional date parameters
-      let url = `https://api.zoom.us/v2/users/${userId}/recordings`;
+      console.log('🔍 Fetching all users from Zoom account...');
+      
+      const { data } = await axios.request(options);
+      console.log('✅ All users fetched successfully');
+      console.log('Users data:', data);
+      return data;
+    } catch (error: unknown) {
+      console.log('❌ Failed to get all users:', error instanceof Error ? error.message : 'Unknown error');
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number; data?: unknown } };
+        console.log('Error response status:', axiosError.response?.status);
+        console.log('Error response data:', axiosError.response?.data);
+      }
+      throw error;
+    }
+  }
+
+  async getListMeetings(token: string, fromDate?: string, toDate?: string, userId?: string) {
+    try {
+      let finalUserId: string;
+      let isUserSpecific = false;
+      let userValidation = null;
+      
+      if (userId && userId.trim()) {
+        // Validate the provided userId against actual Zoom users
+        console.log('🔍 Validating userId against Zoom users:', userId);
+        const allUsers = await this.getAllUsers(token);
+        const users = allUsers.users || [];
+        
+        // Find the user by email
+        const matchingUser = users.find((user: { email: string; id: string; display_name: string }) => 
+          user.email && user.email.toLowerCase() === userId.toLowerCase().trim()
+        );
+        
+        if (matchingUser) {
+          finalUserId = matchingUser.id;
+          isUserSpecific = true;
+          userValidation = {
+            isValid: true,
+            user: matchingUser,
+            message: `User found: ${matchingUser.display_name} (${matchingUser.email})`
+          };
+          console.log(`User validation successful: ${matchingUser.display_name} (${matchingUser.email})`);
+        } else {
+          // User not found - return error instead of falling back to "me"
+          const errorMessage = `User '${userId}' not found in this Zoom account. Please check the email address and try again.`;
+          console.log(errorMessage);
+          
+          throw new Error(errorMessage);
+        }
+      } else {
+        // Only use "me" if no userId is provided
+        console.log('No userId provided, using "me" to get current user recordings');
+        const userInfo = await this.getCurrentUser(token, 'me');
+        finalUserId = userInfo.id;
+        isUserSpecific = false;
+        userValidation = {
+          isValid: true,
+          user: userInfo,
+          message: `Using current user: ${userInfo.display_name} (${userInfo.email})`
+        };
+        console.log(`Using current user: ${userInfo.display_name} (${userInfo.email})`);
+      }
+      
+      // Build base URL with optional date parameters
+      const baseUrl = `https://api.zoom.us/v2/users/${finalUserId}/recordings`;
       const params = new URLSearchParams();
       
       // If no dates provided, use today's date
@@ -211,22 +277,118 @@ export class ZoomAPI {
         }
       }
       
-      if (params.toString()) {
-        url += `?${params.toString()}`;
+      console.log('User-specific endpoint:', isUserSpecific);
+      
+      // Initialize variables for pagination
+      let allMeetings: unknown[] = [];
+      let nextPageToken: string | null = null;
+      let pageCount = 0;
+      let totalRecords = 0;
+      
+      // Fetch all pages
+      do {
+        pageCount++;
+        console.log(`📄 Fetching page ${pageCount}...`);
+        
+        // Build URL for current page
+        let url = baseUrl;
+        const currentParams = new URLSearchParams(params);
+        
+        if (nextPageToken) {
+          currentParams.append('next_page_token', nextPageToken);
+        }
+        
+        if (currentParams.toString()) {
+          url += `?${currentParams.toString()}`;
+        }
+        
+        const options = {
+          method: 'GET',
+          url: url,
+          headers: {Authorization: `Bearer ${token}`}
+        };
+        
+        console.log('Fetching recordings from:', url);
+        
+        const { data } = await axios.request(options);
+        console.log(`✅ Page ${pageCount} fetched successfully`);
+        console.log(`Page ${pageCount} data:`, {
+          total_records: (data as { total_records?: number }).total_records,
+          page_size: (data as { page_size?: number }).page_size,
+          page_count: (data as { page_count?: number }).page_count,
+          next_page_token: (data as { next_page_token?: string }).next_page_token ? 'present' : 'none',
+          meetings_count: (data as { meetings?: unknown[] }).meetings ? (data as { meetings?: unknown[] }).meetings!.length : 0
+        });
+        
+        // Update total records on first page
+        if (pageCount === 1) {
+          totalRecords = (data as { total_records?: number }).total_records || 0;
+        }
+        
+        // Add meetings from current page to all meetings
+        if ((data as { meetings?: unknown[] }).meetings && Array.isArray((data as { meetings?: unknown[] }).meetings)) {
+          allMeetings = allMeetings.concat((data as { meetings?: unknown[] }).meetings!);
+          console.log(`📊 Total meetings collected so far: ${allMeetings.length}/${totalRecords}`);
+        }
+        
+        // Get next page token for next iteration
+        nextPageToken = (data as { next_page_token?: string }).next_page_token || null;
+        
+        // Small delay to avoid rate limiting
+        if (nextPageToken) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+      } while (nextPageToken);
+      
+      console.log(`✅ All pages fetched! Total meetings: ${allMeetings.length}/${totalRecords}`);
+      
+      // If we have meetings, try to get host email for each meeting
+      if (allMeetings.length > 0) {
+        console.log('🔍 Fetching host email information for meetings...');
+        
+        // Get unique host IDs to avoid duplicate API calls
+        const uniqueHostIds = [...new Set(allMeetings.map((meeting: unknown) => (meeting as { host_id: string }).host_id))];
+        console.log('Unique host IDs:', uniqueHostIds);
+        
+        // Create a map to store host_id -> email
+        const hostEmailMap: { [key: string]: string } = {};
+        
+        // Fetch host information for each unique host_id
+        for (const hostId of uniqueHostIds) {
+          try {
+            const hostInfo = await this.getCurrentUser(token, hostId) as { email?: string; display_name?: string };
+            if (hostInfo.email) {
+              hostEmailMap[hostId] = hostInfo.email;
+              console.log(`✅ Host ${hostId} email: ${hostInfo.email}`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Failed to get host info for ${hostId}:`, error);
+            hostEmailMap[hostId] = 'unknown@zoom.us';
+          }
+        }
+        
+        // Add host_email to each meeting
+        allMeetings = allMeetings.map((meeting: unknown) => ({
+          ...(meeting as { [key: string]: unknown }),
+          host_email: hostEmailMap[(meeting as { host_id: string }).host_id] || 'unknown@zoom.us'
+        }));
+        
+        console.log('✅ Added host_email to all meetings');
       }
       
-      const options = {
-        method: 'GET',
-        url: url,
-        headers: {Authorization: `Bearer ${token}`}
+      // Return data in the same format as before, but with all meetings and user validation
+      return {
+        from: fromDate || new Date().toISOString().split('T')[0],
+        to: toDate || new Date().toISOString().split('T')[0],
+        page_count: pageCount,
+        page_size: allMeetings.length,
+        total_records: totalRecords,
+        next_page_token: null, // No more pages
+        meetings: allMeetings,
+        userValidation
       };
       
-      console.log('Fetching recordings from:', url);
-      
-      const { data } = await axios.request(options);
-      console.log('✅ Recordings fetched successfully');
-      console.log('Recordings data:', data);
-      return data;
     } catch (error: unknown) {
       console.log('❌ Failed to get recordings:', error instanceof Error ? error.message : 'Unknown error');
       if (error && typeof error === 'object' && 'response' in error) {

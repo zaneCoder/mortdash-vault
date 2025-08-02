@@ -255,14 +255,38 @@ export class GCSAPI {
 
   async getFileUrl(fileName: string): Promise<string> {
     try {
+      console.log('🔗 Getting signed URL for file:', fileName);
+      
       const [url] = await this.bucket.file(fileName).getSignedUrl({
+        version: 'v4',
         action: 'read',
-        expires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
       });
+      
+      console.log('✅ Signed URL generated:', url);
       return url;
     } catch (error) {
-      console.error('GCS get URL error:', error);
-      throw new Error('Failed to get file URL from Google Cloud Storage');
+      console.error('❌ Failed to get signed URL:', error);
+      throw new Error('Failed to generate signed URL');
+    }
+  }
+
+  async getPublicUrl(fileName: string): Promise<string> {
+    try {
+      console.log('🔗 Getting public URL for file:', fileName);
+      
+      // Generate a public URL with maximum allowed expiration (7 days)
+      const [url] = await this.bucket.file(fileName).getSignedUrl({
+        version: 'v4',
+        action: 'read',
+        expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days (maximum allowed)
+      });
+      
+      console.log('✅ Public URL generated:', url);
+      return url;
+    } catch (error) {
+      console.error('❌ Failed to get public URL:', error);
+      throw new Error('Failed to generate public URL');
     }
   }
 

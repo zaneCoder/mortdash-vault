@@ -10,6 +10,7 @@ interface RequestData {
   fileType: string;
   meetingId: string;
   fileId: string;
+  userId?: string; // Add userId parameter
 }
 
 export async function POST(request: NextRequest) {
@@ -29,8 +30,8 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { fileUrl, fileName, fileType, meetingId, fileId } = requestData;
-    console.log('📋 Request data:', { fileUrl, fileName, fileType, meetingId, fileId });
+    const { fileUrl, fileName, fileType, meetingId, fileId, userId } = requestData;
+    console.log('📋 Request data:', { fileUrl, fileName, fileType, meetingId, fileId, userId });
 
     console.log('🚀 Starting GCS upload for file:', fileId);
     console.log('📋 File details:', { fileName, fileType, meetingId });
@@ -152,7 +153,23 @@ export async function POST(request: NextRequest) {
 
     // Generate unique filename for GCS
     const timestamp = Date.now();
-    const uniqueFileName = `zoom-recordings/${userPath}/${meetingId}/${timestamp}_${fileName}`;
+    
+    // Use userId for folder structure if available, otherwise fall back to userPath
+    let folderPath: string;
+    if (userId) {
+      // Create folder structure: zoom-recordings/email/topic (email lowercase, topic original case)
+      const emailPrefix = userId.split('@')[0].toLowerCase(); // Ensure email prefix is lowercase
+      const originalTopic = recordings.topic || 'Meeting'; // Use original topic name exactly as is
+      folderPath = `zoom-recordings/${emailPrefix}/${originalTopic}`;
+      console.log('📁 Using userId-based folder structure:', folderPath);
+    } else {
+      // Fallback to original userPath structure
+      folderPath = `zoom-recordings/${userPath}/${meetingId}`;
+      console.log('📁 Using fallback folder structure:', folderPath);
+    }
+    
+    // Use the descriptive file name directly without timestamp prefix
+    const uniqueFileName = `${folderPath}/${fileName}`;
     console.log('📁 Final GCS path:', uniqueFileName);
 
     // Determine content type based on file type
@@ -203,7 +220,8 @@ export async function POST(request: NextRequest) {
         uploadedAt: new Date(),
         userPath,
         userEmail,
-        userDisplayName
+        userDisplayName,
+        userId // Add userId to the record
       });
 
       console.log('📋 Created UploadedFile instance:', uploadedFile);

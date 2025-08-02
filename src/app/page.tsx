@@ -51,6 +51,7 @@ interface Meeting {
   share_url: string;
   recording_files: RecordingFile[];
   recording_play_passcode: string;
+  host_email?: string; // Added host_email to the interface
 }
 
 interface RecordingsResponse {
@@ -176,9 +177,15 @@ function HomeContent() {
         throw new Error(result.error || 'Failed to connect to Zoom API');
       }
 
-      toast.success(result.message || 'Recordings fetched successfully!');
-      setRecordings(result.meetings);
+      // Set recordings directly from API response (no client-side filtering needed)
+      setRecordings({
+        ...result.meetings,
+        meetings: result.meetings.meetings
+      });
+      
+      // Remove user validation toast messages
       console.log('API Response:', result);
+      console.log('Recordings:', result.meetings.meetings);
 
       // Check upload statuses after fetching recordings (silently, no toast)
       setTimeout(() => {
@@ -417,7 +424,7 @@ function HomeContent() {
                 <div className="flex-1">
                   <Label htmlFor="userId" className="flex items-center">
                     <User className="w-4 h-4 mr-1" />
-                    User ID (Optional)
+                    User ID or Email (Optional)
                   </Label>
                   <Input
                     id="userId"
@@ -524,6 +531,7 @@ function HomeContent() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Meeting</TableHead>
+                          <TableHead>Host</TableHead>
                           <TableHead className="flex items-center">
                             <Clock className="w-4 h-4 mr-1" />
                             Date & Time
@@ -578,6 +586,11 @@ function HomeContent() {
                                       ID: {meeting.id}
                                     </div>
                                   </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="text-sm text-muted-foreground">
+                                  {meeting.host_email || 'N/A'}
                                 </div>
                               </TableCell>
                               <TableCell>

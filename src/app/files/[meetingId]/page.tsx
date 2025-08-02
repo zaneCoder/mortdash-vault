@@ -23,7 +23,8 @@ import {
   MessageSquare,
   Upload,
   X,
-  FileIcon
+  FileIcon,
+  XCircle
 } from 'lucide-react';
 
 interface RecordingFile {
@@ -82,6 +83,7 @@ export default function FilesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const meetingId = params.meetingId as string;
+  const userId = searchParams.get('userId'); // Extract userId from URL parameters
   
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +98,14 @@ export default function FilesPage() {
   const [downloadingFiles, setDownloadingFiles] = useState<Set<string>>(new Set());
   const [uploadingFiles, setUploadingFiles] = useState<Set<string>>(new Set());
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: number }>({});
+  const [abortControllers, setAbortControllers] = useState<{ [key: string]: AbortController }>({});
+
+  // Log userId for debugging
+  useEffect(() => {
+    if (userId) {
+      console.log('👤 UserId extracted from URL:', userId);
+    }
+  }, [userId]);
 
   const checkUploadedFiles = useCallback(async () => {
     if (!meetingId) return;
@@ -208,11 +218,11 @@ export default function FilesPage() {
       console.log('📋 File Extension:', file.file_extension);
       
       const requestBody = {
-        fileUrl: file.download_url,
+          fileUrl: file.download_url,
         meetingId: recordings?.id,
         fileName: `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`
       };
-      
+
       console.log('📤 Sending download request with body:', requestBody);
       
       // Use XMLHttpRequest for progress tracking
@@ -228,7 +238,7 @@ export default function FilesPage() {
             const progress = Math.round((event.loaded / event.total) * 100);
             setDownloadProgress(prev => ({ ...prev, [file.id]: progress }));
             console.log(`📥 Download progress for ${file.id}: ${progress}%`);
-          }
+      }
         };
         
         xhr.onload = async () => {
@@ -236,20 +246,20 @@ export default function FilesPage() {
             try {
               // Create blob from response
               const blob = new Blob([xhr.response]);
-              console.log('📦 Blob size:', blob.size, 'bytes');
-              
+      console.log('📦 Blob size:', blob.size, 'bytes');
+      
               // Trigger download
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
-              
-              console.log('✅ Download completed for file:', file.id);
-              toast.success(`Downloaded ${file.file_type} file successfully!`);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${recordings?.topic || 'Meeting'}_${file.file_type}_${file.id}.${file.file_extension}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      console.log('✅ Download completed for file:', file.id);
+      toast.success(`Downloaded ${file.file_type} file successfully!`);
               setDownloadProgress(prev => ({ ...prev, [file.id]: 100 }));
               
               resolve();
@@ -307,48 +317,41 @@ export default function FilesPage() {
   };
 
   const uploadFile = async (file: RecordingFile) => {
-    // Prevent duplicate uploads
-    if (uploadingFiles.has(file.id)) {
-      console.log('⚠️ Upload already in progress for file:', file.id);
-      return;
-    }
-
-    const uploadFile: UploadFile = {
-      id: file.id,
-      name: `${file.file_type}_${file.id}.${file.file_extension}`,
-      size: file.file_size,
-      type: file.file_type,
-      progress: 0,
-      status: 'pending'
-    };
-
-    setUploadFiles(prev => [...prev, uploadFile]);
-    setIsUploadModalOpen(true);
-    setShowMiniProgress(false);
+    if (!recordings) return;
+    
+    // Create descriptive file name
+    const meetingTopic = recordings.topic || 'Meeting';
+    const recordingTypeLabel = getRecordingTypeLabel(file.recording_type);
+    const descriptiveFileName = `${meetingTopic} - ${file.file_type} - ${recordingTypeLabel}.${file.file_extension}`;
+    
+    console.log('📤 Starting upload for file:', file.id);
+    console.log('📋 Descriptive file name:', descriptiveFileName);
+    
+    // Add file to uploading set
+    setUploadingFiles(prev => new Set([...prev, file.id]));
+    
+    // Create abort controller for this upload
+    const abortController = new AbortController();
+    setAbortControllers(prev => ({ ...prev, [file.id]: abortController }));
+    
+    updateUploadProgress(file.id, 0, 'uploading');
+    
+    // Start progress simulation
+    const fileSizeMB = file.file_size / (1024 * 1024);
+    const estimatedTimeMs = fileSizeMB * 800;
+    const updateInterval = Math.max(50, estimatedTimeMs / 100);
+    
+    const progressTimer = setInterval(() => {
+      setUploadFiles(prev => 
+        prev.map(f => 
+          f.id === file.id && f.progress < 85
+            ? { ...f, progress: Math.round(f.progress + (Math.random() * 3 + 1)) }
+            : f
+        )
+      );
+    }, updateInterval);
 
     try {
-      console.log('🚀 Starting GCS upload for file:', file.id);
-      
-      // Add file to uploading set
-      setUploadingFiles(prev => new Set([...prev, file.id]));
-      
-      // Start progress simulation based on file size with smoother animation
-      const fileSizeMB = file.file_size / (1024 * 1024);
-      const estimatedTimeMs = fileSizeMB * 800; // Slightly faster for better UX
-      const updateInterval = Math.max(50, estimatedTimeMs / 100); // More frequent updates
-      
-      updateUploadProgress(file.id, 0, 'uploading');
-      
-      const progressTimer = setInterval(() => {
-        setUploadFiles(prev => 
-          prev.map(f => 
-            f.id === file.id && f.progress < 85
-              ? { ...f, progress: Math.round(f.progress + (Math.random() * 3 + 1)) } // Random increments for more natural feel
-              : f
-          )
-        );
-      }, updateInterval);
-      
       const response = await fetch('/api/gcs/upload', {
         method: 'POST',
         headers: {
@@ -356,31 +359,20 @@ export default function FilesPage() {
         },
         body: JSON.stringify({
           fileUrl: file.download_url,
-          fileName: `${file.file_type}_${file.id}.${file.file_extension}`,
+          fileName: descriptiveFileName,
           fileType: file.file_type,
-          meetingId: recordings?.id,
-          fileId: file.id
+          meetingId: recordings.id.toString(),
+          fileId: file.id,
+          userId: searchParams.get('userId') || undefined
         }),
+        signal: abortController.signal
       });
 
       clearInterval(progressTimer);
       
-      console.log('📡 GCS upload response status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ GCS upload error response:', errorData);
-        updateUploadProgress(file.id, 0, 'error', errorData.error || 'Upload failed');
         throw new Error(errorData.error || 'Upload failed');
-      }
-
-      const result = await response.json();
-      console.log('✅ GCS upload successful:', result);
-      
-      // Smooth completion animation
-      for (let i = 85; i <= 100; i += 2) {
-        await new Promise(resolve => setTimeout(resolve, 20));
-        updateUploadProgress(file.id, i, 'uploading');
       }
       
       updateUploadProgress(file.id, 100, 'completed');
@@ -390,15 +382,28 @@ export default function FilesPage() {
       await checkUploadedFiles();
       
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      console.error('❌ GCS upload failed for file:', file.id, error);
-      updateUploadProgress(file.id, 0, 'error', errorMessage);
+      // Check if it's an abort error
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.log('📤 Upload was cancelled for file:', file.id);
+        updateUploadProgress(file.id, 0, 'error', 'Upload cancelled');
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        console.error('❌ GCS upload failed for file:', file.id, error);
+        updateUploadProgress(file.id, 0, 'error', errorMessage);
+      }
     } finally {
       // Remove file from uploading set
       setUploadingFiles(prev => {
         const newSet = new Set(prev);
         newSet.delete(file.id);
         return newSet;
+      });
+      
+      // Remove abort controller
+      setAbortControllers(prev => {
+        const newControllers = { ...prev };
+        delete newControllers[file.id];
+        return newControllers;
       });
     }
   };
@@ -416,15 +421,21 @@ export default function FilesPage() {
     
     console.log('🚀 Starting simultaneous download/upload for', filesToUpload.length, 'files');
 
-    // Initialize upload files
-    const uploadFilesList: UploadFile[] = filesToUpload.map(file => ({
-      id: file.id,
-      name: `${file.file_type}_${file.id}.${file.file_extension}`,
-      size: file.file_size,
-      type: file.file_type,
-      progress: 0,
-      status: 'pending'
-    }));
+    // Initialize upload files with descriptive names
+    const uploadFilesList: UploadFile[] = filesToUpload.map(file => {
+      const meetingTopic = recordings.topic || 'Meeting';
+      const recordingTypeLabel = getRecordingTypeLabel(file.recording_type);
+      const descriptiveFileName = `${meetingTopic} - ${file.file_type} - ${recordingTypeLabel}.${file.file_extension}`;
+      
+      return {
+        id: file.id,
+        name: descriptiveFileName,
+        size: file.file_size,
+        type: file.file_type,
+        progress: 0,
+        status: 'pending'
+      };
+    });
 
     setUploadFiles(uploadFilesList);
     setIsUploadModalOpen(true);
@@ -437,6 +448,10 @@ export default function FilesPage() {
       // Start all uploads simultaneously
       const uploadPromises = filesToUpload.map(async (file, index) => {
         console.log(`📤 Starting simultaneous upload ${index + 1}/${filesToUpload.length}:`, file.file_type);
+        
+        // Create abort controller for this upload
+        const abortController = new AbortController();
+        setAbortControllers(prev => ({ ...prev, [file.id]: abortController }));
         
         updateUploadProgress(file.id, 0, 'uploading');
         
@@ -456,6 +471,11 @@ export default function FilesPage() {
         }, updateInterval);
 
         try {
+          // Create descriptive file name for this upload
+          const meetingTopic = recordings.topic || 'Meeting';
+          const recordingTypeLabel = getRecordingTypeLabel(file.recording_type);
+          const descriptiveFileName = `${meetingTopic} - ${file.file_type} - ${recordingTypeLabel}.${file.file_extension}`;
+          
           const response = await fetch('/api/gcs/upload', {
             method: 'POST',
             headers: {
@@ -463,82 +483,68 @@ export default function FilesPage() {
             },
             body: JSON.stringify({
               fileUrl: file.download_url,
-              fileName: `${file.file_type}_${file.id}.${file.file_extension}`,
+              fileName: descriptiveFileName,
               fileType: file.file_type,
-              meetingId: recordings.id,
-              fileId: file.id
+              meetingId: recordings.id.toString(),
+              fileId: file.id,
+              userId: searchParams.get('userId') || undefined
             }),
+            signal: abortController.signal
           });
 
           clearInterval(progressTimer);
-
-          if (!response.ok) {
-            const error = await response.json();
-            updateUploadProgress(file.id, 0, 'error', error.error || `Upload failed for ${file.file_type} file`);
-            throw new Error(error.error || `Upload failed for ${file.file_type} file`);
-          }
-
-          const result = await response.json();
-          console.log(`✅ Uploaded ${file.file_type} file:`, result);
           
-          // Smooth completion animation
-          for (let i = 85; i <= 100; i += 2) {
-            await new Promise(resolve => setTimeout(resolve, 20));
-            updateUploadProgress(file.id, i, 'uploading');
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Upload failed');
           }
           
           updateUploadProgress(file.id, 100, 'completed');
           
-          return { success: true, file };
-        } catch (error) {
+        } catch (error: unknown) {
           clearInterval(progressTimer);
-          console.error(`❌ Upload failed for ${file.file_type} file:`, error);
-          updateUploadProgress(file.id, 0, 'error', error instanceof Error ? error.message : 'Upload failed');
-          return { success: false, file, error };
+          
+          if (error instanceof Error && error.name === 'AbortError') {
+            console.log('📤 Upload was cancelled for file:', file.id);
+            updateUploadProgress(file.id, 0, 'error', 'Upload cancelled');
+          } else {
+            const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+            console.error('❌ GCS upload failed for file:', file.id, error);
+            updateUploadProgress(file.id, 0, 'error', errorMessage);
+          }
+        } finally {
+          // Remove file from uploading set
+          setUploadingFiles(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(file.id);
+            return newSet;
+          });
+          
+          // Remove abort controller
+          setAbortControllers(prev => {
+            const newControllers = { ...prev };
+            delete newControllers[file.id];
+            return newControllers;
+          });
         }
       });
-
-      // Wait for all uploads to complete
-      const results = await Promise.allSettled(uploadPromises);
       
-      // Process results
-      const successfulUploads = results.filter(result => 
-        result.status === 'fulfilled' && result.value.success
-      ).length;
-      
-      const failedUploads = results.filter(result => 
-        result.status === 'rejected' || (result.status === 'fulfilled' && !result.value.success)
-      ).length;
-
-      // Remove all files from uploading set
-      setUploadingFiles(prev => {
-        const newSet = new Set(prev);
-        filesToUpload.forEach(file => newSet.delete(file.id));
-        return newSet;
-      });
-
-      if (successfulUploads > 0) {
-        toast.success(`Successfully uploaded ${successfulUploads} files to Google Cloud Storage!`);
-      }
-      
-      if (failedUploads > 0) {
-        toast.error(`${failedUploads} files failed to upload. Please try again.`);
-      }
+      await Promise.all(uploadPromises);
       
       // Refresh uploaded files list
       await checkUploadedFiles();
       
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      console.error('❌ Bulk upload failed:', error);
-      toast.error(`Upload failed: ${errorMessage}`);
+      toast.success(`Successfully uploaded ${filesToUpload.length} files to Google Cloud Storage!`);
       
-      // Remove all files from uploading set on error
-      setUploadingFiles(prev => {
-        const newSet = new Set(prev);
-        filesToUpload.forEach(file => newSet.delete(file.id));
-        return newSet;
-      });
+    } catch (error) {
+      console.error('❌ Upload process failed:', error);
+      toast.error('Upload process failed. Please try again.');
+    } finally {
+      // Close modal after a delay
+      setTimeout(() => {
+        setIsUploadModalOpen(false);
+        setUploadFiles([]);
+      }, 2000);
     }
   };
 
@@ -547,6 +553,12 @@ export default function FilesPage() {
   };
 
   const handleBackNavigation = () => {
+    // Check if there are uploads in progress
+    if (uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')) {
+      toast.error('Please wait for uploads to complete before navigating away.');
+      return;
+    }
+    
     setIsNavigatingBack(true);
     // Preserve search parameters when going back
     const currentParams = new URLSearchParams(searchParams.toString());
@@ -577,6 +589,58 @@ export default function FilesPage() {
   const handleMiniProgressClose = () => {
     setShowMiniProgress(false);
     setUploadFiles([]);
+  };
+
+  const cancelUpload = (fileId: string) => {
+    // Abort the specific upload
+    if (abortControllers[fileId]) {
+      abortControllers[fileId].abort();
+      console.log(`❌ Cancelled upload for file: ${fileId}`);
+    }
+    
+    // Update progress to cancelled state
+    updateUploadProgress(fileId, 0, 'error', 'Upload cancelled');
+    
+    // Remove from uploading sets
+    setUploadingFiles(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(fileId);
+      return newSet;
+    });
+    
+    // Remove abort controller
+    setAbortControllers(prev => {
+      const newControllers = { ...prev };
+      delete newControllers[fileId];
+      return newControllers;
+    });
+    
+    toast.success('Upload cancelled successfully');
+  };
+
+  const cancelAllUploads = () => {
+    // Abort all active uploads
+    Object.keys(abortControllers).forEach(fileId => {
+      if (abortControllers[fileId]) {
+        abortControllers[fileId].abort();
+        console.log(`❌ Cancelled upload for file: ${fileId}`);
+      }
+    });
+    
+    // Update all pending/uploading files to cancelled state
+    setUploadFiles(prev => 
+      prev.map(file => 
+        (file.status === 'pending' || file.status === 'uploading') 
+          ? { ...file, progress: 0, status: 'error' as const, error: 'Upload cancelled' }
+          : file
+      )
+    );
+    
+    // Clear all uploading sets
+    setUploadingFiles(new Set());
+    setAbortControllers({});
+    
+    toast.success('All uploads cancelled successfully');
   };
 
   const handleDownloadClick = (file: RecordingFile, event: React.MouseEvent<HTMLButtonElement>) => {
@@ -676,7 +740,7 @@ export default function FilesPage() {
                   onClick={handleBackNavigation}
                   variant="outline"
                   size="sm"
-                  disabled={isNavigatingBack}
+                  disabled={isNavigatingBack || uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')}
                 >
                   {isNavigatingBack ? (
                     <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -686,7 +750,7 @@ export default function FilesPage() {
                   ) : (
                     <ArrowLeft className="w-4 h-4 mr-2" />
                   )}
-                  {isNavigatingBack ? 'Going Back...' : 'Back to Dashboard'}
+                  {isNavigatingBack ? 'Going Back...' : uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending') ? 'Uploads in Progress...' : 'Back to Dashboard'}
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold flex items-center gap-2">
@@ -700,15 +764,24 @@ export default function FilesPage() {
                 <div className="text-right">
                   <div className="text-sm text-muted-foreground">Meeting ID: {recordings.id}</div>
                   <div className="text-sm text-muted-foreground">{dateTime.date} at {dateTime.time}</div>
+                  {(uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')) && (
+                    <div className="text-sm text-orange-600 font-medium mt-1 flex items-center gap-1">
+                      <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Uploads in Progress
+                    </div>
+                  )}
                 </div>
                 <Button
                   onClick={uploadAllFiles}
                   className={uploadedFiles.size === recordings.recording_files.length ? "bg-green-600 hover:bg-green-700" : "bg-green-600 hover:bg-green-700"}
-                  disabled={uploadedFiles.size === recordings.recording_files.length || isCheckingUploads || uploadingFiles.size > 0}
+                  disabled={uploadedFiles.size === recordings.recording_files.length || isCheckingUploads || uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')}
                 >
                   {uploadedFiles.size === recordings.recording_files.length ? (
                     <CheckCircle className="w-4 h-4 mr-2" />
-                  ) : uploadingFiles.size > 0 ? (
+                  ) : uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending') ? (
                     <svg className="animate-spin h-4 w-4 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -716,8 +789,19 @@ export default function FilesPage() {
                   ) : (
                     <Upload className="w-4 h-4 mr-2" />
                   )}
-                  {uploadedFiles.size === recordings.recording_files.length ? 'All Files Uploaded' : uploadingFiles.size > 0 ? 'Uploading...' : 'Upload All Files'}
+                  {uploadedFiles.size === recordings.recording_files.length ? 'All Files Uploaded' : uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending') ? 'Uploads in Progress...' : 'Upload All Files'}
                 </Button>
+                {(uploadingFiles.size > 0 || uploadFiles.some(f => f.status === 'uploading' || f.status === 'pending')) && (
+                  <Button
+                    onClick={cancelAllUploads}
+                    variant="destructive"
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    <XCircle className="w-4 h-4 mr-2" />
+                    Cancel All
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
@@ -857,6 +941,16 @@ export default function FilesPage() {
                               )}
                               {uploadedFiles.has(file.id) ? 'Uploaded' : uploadingFiles.has(file.id) ? 'Uploading...' : 'Upload'}
                             </Button>
+                            {uploadingFiles.has(file.id) && (
+                              <Button
+                                onClick={() => cancelUpload(file.id)}
+                                variant="destructive"
+                                size="sm"
+                                className="bg-red-600 hover:bg-red-700"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardContent>
@@ -875,6 +969,8 @@ export default function FilesPage() {
         onClose={handleModalClose}
         files={uploadFiles}
         onUploadComplete={handleUploadComplete}
+        onCancelAll={cancelAllUploads}
+        onCancelFile={cancelUpload}
       />
 
       {/* Mini Progress Component */}
@@ -989,7 +1085,7 @@ export default function FilesPage() {
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                       ) : (
-                        <Download className="w-4 h-4 mr-2" />
+                      <Download className="w-4 h-4 mr-2" />
                       )}
                       {downloadingFiles.has(playingFile.id) 
                         ? downloadProgress[playingFile.id] 

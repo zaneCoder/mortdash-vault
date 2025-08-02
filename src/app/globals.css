@@ -3,6 +3,65 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Custom shadow utility */
+.shadow-3xl {
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+/* Toast positioning - move to bottom-right to avoid blocking navigation */
+[data-sonner-toaster] {
+  position: fixed !important;
+  top: auto !important;
+  bottom: 2rem !important;
+  right: 2rem !important;
+  left: auto !important;
+  z-index: 1000 !important;
+}
+
+[data-sonner-toaster][data-position="top-center"] {
+  top: auto !important;
+  bottom: 2rem !important;
+  right: 2rem !important;
+  left: auto !important;
+}
+
+[data-sonner-toaster][data-position="top-right"] {
+  top: auto !important;
+  bottom: 2rem !important;
+  right: 2rem !important;
+  left: auto !important;
+}
+
+[data-sonner-toaster][data-position="top-left"] {
+  top: auto !important;
+  bottom: 2rem !important;
+  right: 2rem !important;
+  left: auto !important;
+}
+
+/* Dropdown scrolling styles */
+[data-radix-popper-content-wrapper] {
+  max-height: 300px !important;
+  overflow-y: auto !important;
+}
+
+[data-radix-popper-content-wrapper]::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-radix-popper-content-wrapper]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-radix-popper-content-wrapper]::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+[data-radix-popper-content-wrapper]::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
