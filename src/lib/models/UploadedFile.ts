@@ -13,6 +13,7 @@ export interface IUploadedFile extends Document {
   userPath?: string;
   userEmail?: string;
   userDisplayName?: string;
+  userId?: string; // Add userId field
 }
 
 const UploadedFileSchema = new Schema<IUploadedFile>({
@@ -62,6 +63,9 @@ const UploadedFileSchema = new Schema<IUploadedFile>({
     type: String
   },
   userDisplayName: {
+    type: String
+  },
+  userId: {
     type: String
   }
 });

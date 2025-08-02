@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     console.log('📋 fileUrl:', fileUrl);
     console.log('📋 meetingId:', meetingId);
     console.log('📋 fileName:', fileName);
-    
+
     if (!fileUrl || !meetingId) {
       return NextResponse.json(
         { error: 'Missing required parameters: fileUrl, meetingId' },
